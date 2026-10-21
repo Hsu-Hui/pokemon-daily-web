@@ -15,7 +15,7 @@ const KEEP_SEEN_DAYS = 120;     // 記住看過的商品、新聞多久（避免
 const REMIND_HOURS = 4;         // 任務結束前幾小時開始提醒
 
 const SHEETS = {
-  events: { name: '活動', headers: ['id', 'name', 'type', 'url', 'start', 'end', 'firstSeen'] },
+  events: { name: '活動', headers: ['id', 'name', 'type', 'url', 'start', 'end', 'firstSeen', 'category'] },
   tasks: { name: '任務', headers: ['id', 'name', 'url', 'start', 'end', 'tasks', 'firstSeen'] },
   products: { name: '商品', headers: ['id', 'source', 'name', 'url', 'price', 'image', 'firstSeen'] },
   news: { name: '新聞', headers: ['id', 'kind', 'title', 'url', 'source', 'others', 'published', 'firstSeen'] },
@@ -58,6 +58,7 @@ function readRows_(key) {
 function writeRows_(key, objs) {
   const sh = sheet_(key);
   const headers = SHEETS[key].headers;
+  sh.getRange(1, 1, 1, headers.length).setValues([headers]); // 欄位有增加時更新標題列
   if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).clearContent();
   if (!objs.length) return;
   const values = objs.map((o) => headers.map((h) => {
@@ -203,7 +204,7 @@ function remindTasks() {
     if (!g.end || state.gaveUp[g.id]) return;
     const left = new Date(g.end) - now;
     if (left <= 0 || left > REMIND_HOURS * 3600 * 1000) return;
-    const todo = g.tasks.filter((t, i) => !state.taskDone[g.id + '#' + i]);
+    const todo = g.tasks.filter((t, i) => !state.taskDone[g.id + '#' + (t.id || i)]);
     if (!todo.length) return;
     const h = Math.floor(left / 3600000);
     const m = Math.floor((left % 3600000) / 60000);

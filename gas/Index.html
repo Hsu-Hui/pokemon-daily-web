@@ -62,8 +62,20 @@ td { padding: 12px 8px; border-top: 1px solid var(--line); vertical-align: middl
 th:first-child, td:first-child { padding-left: 16px; width: 56px; }
 .scroll { overflow-x: auto; }
 .when { font-size: 14px; white-space: nowrap; }
+.th-sort { border: 0; background: transparent; padding: 0; color: inherit; font: inherit; font-weight: 700; display: inline-flex; gap: 4px; align-items: center; min-height: 32px; }
+.th-sort[aria-pressed=true] { color: var(--ink); }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+select { font: inherit; font-size: 14px; min-height: 40px; padding: 0 12px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); }
+.pager { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; justify-content: center; padding-top: 4px; }
+.pager button { min-width: 40px; min-height: 40px; padding: 0 12px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 700; }
+.pager button[aria-current=page] { background: var(--active-bg); border-color: var(--active-bg); color: var(--active-ink); }
+.pager button:disabled { opacity: .4; cursor: default; }
 .only-narrow { display: none; }
-@media (max-width: 680px) { .only-wide { display: none; } .only-narrow { display: flex; } }
+@media (max-width: 680px) {
+  .only-wide { display: none; } .only-narrow { display: flex; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .product .img { height: 120px; }
+}
 
 .task { display: flex; gap: 12px; align-items: center; padding: 6px 0; min-height: 32px; }
 .task .reward { margin-left: auto; text-align: right; font-size: 13px; color: var(--muted); }
@@ -108,7 +120,11 @@ const TYPE_COLORS = {
   '聚焦時刻': ['#FDEBD3', '#7A4200'], '活動': ['#DCEAFE', '#163F7A'], '調查': ['#E6E8EC', '#30353F'],
 };
 const DAY = 864e5, HOUR = 36e5, REMIND_MS = 4 * HOUR;
-const ui = { tab: 'overview', goType: '全部', src: '全部' };
+const CATEGORIES = ['聚焦時刻', '極巨化/超極巨化', '團體戰/超級團體戰', 'GO Pass', '限時調查', '其他'];
+const SOURCES = ['PChome', '寶可夢中心', '官網'];
+const PAGE_SIZE = 25;
+// goCats、srcs 是多選，空陣列代表「全部」；goSort.key 為 null 時用預設排序（類型 → 開始 → 結束）
+const ui = { tab: 'overview', goCats: [], srcs: [], goSort: { key: null, dir: 1 }, shopSort: 'new', page: {} };
 let data = null;
 try { ui.tab = localStorage.getItem('tab') || 'overview'; } catch (e) {}
 
@@ -159,7 +175,10 @@ function derive() {
   const tasks = data.tasks.map((g) => {
     const end = g.end ? new Date(g.end).getTime() : null;
     const left = end ? end - now : Infinity;
-    const items = g.tasks.map((t, i) => Object.assign({}, t, { key: g.id + '#' + i, done: !!s.taskDone[g.id + '#' + i] }));
+    const items = g.tasks.map((t, i) => {
+      const key = g.id + '#' + (t.id || i);
+      return Object.assign({}, t, { key, done: !!s.taskDone[key] });
+    });
     const n = items.filter((t) => t.done).length;
     return Object.assign({}, g, {
       items, n, allDone: n === items.length, gaveUp: !!s.gaveUp[g.id], ended: left <= 0, left,
@@ -170,7 +189,7 @@ function derive() {
     id: n.id, source: n.source === '寶可夢官網' ? '官網' : '寶可夢中心', name: n.title, url: n.url,
     price: '看消息', image: '', firstSeen: n.firstSeen, media: n.source,
   }));
-  const products = data.products.concat(shopNews).sort((a, b) => (b.firstSeen || '').localeCompare(a.firstSeen || ''));
+  const products = data.products.concat(shopNews);
   const twNews = data.news.filter((n) => n.kind === 'event').sort((a, b) => (b.published || b.firstSeen || '').localeCompare(a.published || a.firstSeen || ''));
   return {
     activeEvents: events.filter((e) => !e.done && !e.ended),
@@ -183,6 +202,79 @@ function derive() {
 }
 // ---------- 畫面 ----------
 
+const catOf = (e) => (CATEGORIES.includes(e.category) ? e.category : '其他');
+const ts = (iso) => (iso ? new Date(iso).getTime() : Infinity);
+
+function toggleIn(list, value) {
+  if (value === '全部') return [];
+  return list.includes(value) ? list.filter((x) => x !== value) : list.concat(value);
+}
+
+function pillsHtml(options, selected, attr, countOf) {
+  return ['全部'].concat(options).map((o) => {
+    const on = o === '全部' ? !selected.length : selected.includes(o);
+    return `<button type="button" class="pill" aria-pressed="${on}" aria-selected="${on}" data-${attr}="${esc(o)}">${esc(o)}${countOf ? ' ' + countOf(o) : ''}</button>`;
+  }).join('');
+}
+
+function paginate(list, key) {
+  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const page = Math.min(ui.page[key] || 1, pages);
+  ui.page[key] = page;
+  let pager = '';
+  if (pages > 1) {
+    const nums = [];
+    for (let i = 1; i <= pages; i++) {
+      if (i === 1 || i === pages || Math.abs(i - page) <= 2) nums.push(i);
+      else if (nums[nums.length - 1] !== '…') nums.push('…');
+    }
+    pager = `<nav class="pager" aria-label="分頁">
+      <button type="button" data-page="${key}:${page - 1}" ${page === 1 ? 'disabled' : ''} aria-label="上一頁">‹</button>
+      ${nums.map((n) => n === '…' ? '<span class="muted">…</span>' : `<button type="button" data-page="${key}:${n}" ${n === page ? 'aria-current="page"' : ''}>${n}</button>`).join('')}
+      <button type="button" data-page="${key}:${page + 1}" ${page === pages ? 'disabled' : ''} aria-label="下一頁">›</button>
+      <span class="muted" style="width:100%;text-align:center;font-size:13px">共 ${list.length} 筆，每頁 ${PAGE_SIZE} 筆</span>
+    </nav>`;
+  }
+  return { items: list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), pager };
+}
+
+const SORT_KEYS = { type: (e) => CATEGORIES.indexOf(catOf(e)), start: (e) => ts(e.start), end: (e) => ts(e.end) };
+function sortEvents(list) {
+  const { key, dir } = ui.goSort;
+  const order = key ? [key].concat(['type', 'start', 'end'].filter((k) => k !== key)) : ['type', 'start', 'end'];
+  return list.slice().sort((a, b) => {
+    for (const k of order) {
+      const x = SORT_KEYS[k](a), y = SORT_KEYS[k](b);
+      if (x !== y) return (x < y ? -1 : 1) * (k === key ? dir : 1);
+      if (k === 'type' && a.type !== b.type) return String(a.type).localeCompare(String(b.type)) * (k === key ? dir : 1);
+    }
+    return 0;
+  });
+}
+
+function sortButton(key, label) {
+  const on = ui.goSort.key === key;
+  const arrow = on ? (ui.goSort.dir > 0 ? '▲' : '▼') : '↕';
+  return `<button type="button" class="th-sort" data-sort="${key}" aria-pressed="${on}">${label} <span aria-hidden="true">${arrow}</span></button>`;
+}
+
+const priceOf = (p) => { const n = parseInt(String(p.price || '').replace(/[^\d]/g, ''), 10); return isNaN(n) ? null : n; };
+function sortProducts(list) {
+  const indexed = list.map((p, i) => ({ p, i }));
+  const by = {
+    new: (a, b) => (b.p.firstSeen || '').localeCompare(a.p.firstSeen || '') || a.i - b.i,
+    old: (a, b) => (a.p.firstSeen || '').localeCompare(b.p.firstSeen || '') || b.i - a.i,
+    priceDesc: (a, b) => priceCmp(a, b, -1),
+    priceAsc: (a, b) => priceCmp(a, b, 1),
+  };
+  function priceCmp(a, b, dir) {
+    const x = priceOf(a.p), y = priceOf(b.p);
+    if (x === null || y === null) return (x === null) - (y === null) || a.i - b.i; // 沒有價格的排最後
+    return (x - y) * dir || a.i - b.i;
+  }
+  return indexed.sort(by[ui.shopSort] || by.new).map((x) => x.p);
+}
+
 function renderTabs() {
   document.getElementById('tabs').innerHTML = TABS.map(([id, label]) =>
     `<button type="button" role="tab" aria-selected="${id === ui.tab}" data-tab="${id}">${label}</button>`).join('');
@@ -193,7 +285,7 @@ function eventRows(list) {
     <tr class="${e.done ? 'done' : ''}">
       <td><input type="checkbox" data-flag="done" data-id="${esc(e.id)}" ${e.done ? 'checked' : ''} aria-label="標記完成"></td>
       <td><a class="link" href="${esc(e.url)}" target="_blank" rel="noopener"><b>${esc(e.name)}</b></a></td>
-      <td>${tagHtml(e.type)}</td>
+      <td>${tagHtml(catOf(e))}${e.type && e.type !== catOf(e) ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(e.type)}</div>` : ''}</td>
       <td class="when">${when(e.start)}</td>
       <td class="when">${when(e.end)}</td>
       <td style="width:180px;padding-right:16px">
@@ -210,7 +302,7 @@ function eventCards(list) {
     <label class="card pad row ${e.done ? 'done' : ''}" style="align-items:flex-start;flex-wrap:nowrap">
       <input type="checkbox" data-flag="done" data-id="${esc(e.id)}" ${e.done ? 'checked' : ''} style="margin-top:2px">
       <div class="stack grow" style="gap:6px">
-        <div class="row" style="gap:8px">${tagHtml(e.type)}<span class="${e.soon ? 'soon' : 'muted'}" style="font-size:13px;font-weight:700">${e.notStarted ? '未開始' : '剩 ' + leftText(e.left)}</span></div>
+        <div class="row" style="gap:8px">${tagHtml(catOf(e))}<span class="${e.soon ? 'soon' : 'muted'}" style="font-size:13px;font-weight:700">${e.notStarted ? '未開始' : '剩 ' + leftText(e.left)}</span></div>
         <b>${esc(e.name)}</b>
         <span class="muted" style="font-size:13px">${when(e.start)} → ${when(e.end)}</span>
         <div class="bar ${e.soon ? 'soon' : ''}"><div style="width:${e.pct}%"></div></div>
@@ -287,7 +379,7 @@ function render() {
       <section class="card pad stack">
         <h3>快結束了，還沒完成</h3>
         ${soonTasks.map((g) => `<div class="row"><span class="tag">任務</span><b class="grow">${esc(g.name)}</b><b class="soon" style="font-size:14px">剩 ${leftText(g.left)} · ${g.items.length - g.n} 項未完成</b></div>`).join('')}
-        ${soonEvents.map((e) => `<div class="row">${tagHtml(e.type)}<b class="grow">${esc(e.name)}</b><b class="soon" style="font-size:14px">剩 ${leftText(e.left)}</b></div>`).join('')}
+        ${soonEvents.map((e) => `<div class="row">${tagHtml(catOf(e))}<b class="grow">${esc(e.name)}</b><b class="soon" style="font-size:14px">剩 ${leftText(e.left)}</b></div>`).join('')}
         ${soonTasks.length + soonEvents.length ? '' : '<span class="muted">沒有快結束的項目</span>'}
       </section>
       <section class="stack"><h3>今天新上架</h3>
@@ -297,42 +389,49 @@ function render() {
   }
 
   if (ui.tab === 'go') {
-    const types = ['全部'].concat([...new Set(d.activeEvents.map((e) => e.type))]);
-    if (!types.includes(ui.goType)) ui.goType = '全部';
-    const list = ui.goType === '全部' ? d.activeEvents : d.activeEvents.filter((e) => e.type === ui.goType);
+    const sel = ui.goCats;
+    const filtered = sel.length ? d.activeEvents.filter((e) => sel.includes(catOf(e))) : d.activeEvents;
+    const { items, pager } = paginate(sortEvents(filtered), 'go');
+    const count = (c) => c === '全部' ? d.activeEvents.length : d.activeEvents.filter((e) => catOf(e) === c).length;
     html = `
-      <div class="head"><h2>Pokémon GO 活動</h2><span class="muted">勾選完成後移到封存；結束的活動也會自動移過去</span></div>
-      <div class="pills" role="tablist" aria-label="活動類型">${types.map((t) => {
-        const n = t === '全部' ? d.activeEvents.length : d.activeEvents.filter((e) => e.type === t).length;
-        return `<button type="button" class="pill" role="tab" aria-selected="${t === ui.goType}" data-gotype="${esc(t)}">${esc(t)} ${n}</button>`;
-      }).join('')}</div>
-      ${list.length ? `
+      <div class="head"><h2>Pokémon GO 活動</h2><span class="muted">分類可以多選；勾選完成後移到封存，結束的活動也會自動移過去</span></div>
+      <div class="pills" aria-label="活動分類">${pillsHtml(CATEGORIES, sel, 'gocat', count)}</div>
+      <div class="toolbar only-narrow"><span class="muted">排序</span>${sortButton('type', '類型')}${sortButton('start', '開始')}${sortButton('end', '結束')}</div>
+      ${items.length ? `
         <div class="card scroll only-wide"><table>
-          <thead><tr><th>完成</th><th>活動</th><th>類型</th><th>開始</th><th>結束</th><th>剩餘</th></tr></thead>
-          <tbody>${eventRows(list)}</tbody></table></div>
-        <div class="only-narrow stack" style="gap:10px">${eventCards(list)}</div>` : '<p class="muted">目前沒有進行中的活動</p>'}`;
+          <thead><tr><th>完成</th><th>活動</th><th>${sortButton('type', '類型')}</th><th>${sortButton('start', '開始')}</th><th>${sortButton('end', '結束')}</th><th>剩餘</th></tr></thead>
+          <tbody>${eventRows(items)}</tbody></table></div>
+        <div class="only-narrow stack" style="gap:10px">${eventCards(items)}</div>
+        ${pager}` : '<p class="muted">沒有符合的活動</p>'}`;
   }
 
   if (ui.tab === 'tasks') {
     html = `
-      <div class="head"><h2>任務待辦</h2><span class="muted">任務內容來自巴哈姆特 Pokémon GO 哈啦板；結束前 ${REMIND_MS / HOUR} 小時還沒完成會發 Discord 提醒</span></div>
-      ${d.activeTasks.map(taskGroupHtml).join('') || '<p class="muted">目前沒有任務</p>'}`;
+      <div class="head"><h2>任務待辦</h2><span class="muted">田野調查來自 LeekDuck，限時調查來自巴哈姆特 Pokémon GO 哈啦板；結束前 ${REMIND_MS / HOUR} 小時還沒完成會發 Discord 提醒</span></div>
+      ${(() => { const { items, pager } = paginate(d.activeTasks, 'tasks'); return (items.map(taskGroupHtml).join('') || '<p class="muted">目前沒有任務</p>') + pager; })()}`;
   }
 
   if (ui.tab === 'shop') {
-    const srcs = ['全部', 'PChome', '寶可夢中心', '官網'];
-    const list = ui.src === '全部' ? d.products : d.products.filter((p) => p.source === ui.src);
+    const sel = ui.srcs;
+    const filtered = sel.length ? d.products.filter((p) => sel.includes(p.source)) : d.products;
+    const { items, pager } = paginate(sortProducts(filtered), 'shop');
+    const count = (c) => c === '全部' ? d.products.length : d.products.filter((p) => p.source === c).length;
+    const sorts = [['new', '上架時間：新到舊'], ['old', '上架時間：舊到新'], ['priceDesc', '價格：高到低'], ['priceAsc', '價格：低到高']];
     html = `
-      <div class="row"><h2 class="grow">新商品</h2><div class="pills">${srcs.map((s) =>
-        `<button type="button" class="pill" aria-selected="${s === ui.src}" data-src="${s}">${s}</button>`).join('')}</div></div>
-      <span class="muted">最近 7 天新上架，超過 7 天自動移除</span>
-      ${list.length ? `<div class="grid">${list.map((p) => productCard(p, d.isNew(p))).join('')}</div>` : '<p class="muted">沒有商品</p>'}`;
+      <div class="head"><h2>新商品</h2><span class="muted">最近 7 天新上架，超過 7 天自動移除；來源可以多選</span></div>
+      <div class="toolbar">
+        <div class="pills grow" aria-label="來源">${pillsHtml(SOURCES, sel, 'src', count)}</div>
+        <label class="muted" style="display:flex;gap:8px;align-items:center">排序
+          <select data-shopsort>${sorts.map(([v, l]) => `<option value="${v}" ${v === ui.shopSort ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        </label>
+      </div>
+      ${items.length ? `<div class="grid">${items.map((p) => productCard(p, d.isNew(p))).join('')}</div>${pager}` : '<p class="muted">沒有商品</p>'}`;
   }
 
   if (ui.tab === 'tw') {
     html = `
       <div class="head"><h2>台灣寶可夢活動</h2><span class="muted">最近 7 天的官網公告和新聞，同一件事只列一次</span></div>
-      ${d.twNews.map(newsItem).join('') || '<p class="muted">最近沒有新消息</p>'}`;
+      ${(() => { const { items, pager } = paginate(d.twNews, 'tw'); return (items.map(newsItem).join('') || '<p class="muted">最近沒有新消息</p>') + pager; })()}`;
   }
 
   if (ui.tab === 'archive') {
@@ -341,17 +440,17 @@ function render() {
       reason: g.gaveUp ? '已放棄 · 不再提醒' : `已結束 · ${when(g.end)}`,
       restore: g.gaveUp && !g.ended ? `data-flag="gaveUp" data-id="${esc(g.id)}" data-value=""` : '',
     })).concat(d.doneEvents.map((e) => ({
-      tag: tagHtml(e.type), name: e.name,
+      tag: tagHtml(catOf(e)), name: e.name,
       reason: e.done ? `已完成${e.ended ? ' · 已結束' : ''}` : `已結束 · ${when(e.end)}`,
       restore: e.done && !e.ended ? `data-flag="done" data-id="${esc(e.id)}" data-value=""` : '',
     })));
     html = `
       <div class="head"><h2>封存</h2><span class="muted">已完成、已放棄或已結束的項目；按錯了可以按「復原」</span></div>
-      ${items.map((a) => `
+      ${(() => { const pg = paginate(items, 'archive'); return pg.items.map((a) => `
         <div class="card pad row">${a.tag}
           <div class="grow stack" style="gap:0"><b>${esc(a.name)}</b><span class="muted" style="font-size:13px">${a.reason}</span></div>
           ${a.restore ? `<button type="button" class="outline" ${a.restore}>復原</button>` : ''}
-        </div>`).join('') || '<p class="muted">封存是空的</p>'}`;
+        </div>`).join('') + pg.pager || '<p class="muted">封存是空的</p>'; })()}`;
   }
   main.innerHTML = html;
 }
@@ -359,17 +458,24 @@ function render() {
 // ---------- 事件 ----------
 
 document.addEventListener('click', (ev) => {
-  const t = ev.target.closest('[data-tab],[data-gotype],[data-src],button[data-flag]');
-  if (!t) return;
-  if (t.dataset.tab) { ui.tab = t.dataset.tab; try { localStorage.setItem('tab', ui.tab); } catch (e) {} window.scrollTo(0, 0); }
-  else if (t.dataset.gotype) ui.goType = t.dataset.gotype;
-  else if (t.dataset.src) ui.src = t.dataset.src;
-  else { setFlag(t.dataset.flag, t.dataset.id, !!t.dataset.value); return; }
+  const t = ev.target.closest('[data-tab],[data-gocat],[data-src],[data-sort],[data-page],button[data-flag]');
+  if (!t || t.disabled) return;
+  const ds = t.dataset;
+  if (ds.tab) { ui.tab = ds.tab; try { localStorage.setItem('tab', ui.tab); } catch (e) {} window.scrollTo(0, 0); }
+  else if (ds.gocat) { ui.goCats = toggleIn(ui.goCats, ds.gocat); ui.page.go = 1; }
+  else if (ds.src) { ui.srcs = toggleIn(ui.srcs, ds.src); ui.page.shop = 1; }
+  else if (ds.sort) {
+    ui.goSort = ui.goSort.key === ds.sort ? { key: ds.sort, dir: -ui.goSort.dir } : { key: ds.sort, dir: 1 };
+    ui.page.go = 1;
+  }
+  else if (ds.page) { const [k, n] = ds.page.split(':'); ui.page[k] = +n; window.scrollTo(0, 0); }
+  else { setFlag(ds.flag, ds.id, !!ds.value); return; }
   render();
 });
 document.addEventListener('change', (ev) => {
   const t = ev.target;
   if (t.matches('input[data-flag]')) setFlag(t.dataset.flag, t.dataset.id, t.checked);
+  if (t.matches('select[data-shopsort]')) { ui.shopSort = t.value; ui.page.shop = 1; render(); }
 });
 
 google.script.run

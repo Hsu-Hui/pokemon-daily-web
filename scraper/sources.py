@@ -21,6 +21,13 @@ class GoEvent:
     url: str
     start: datetime | None
     end: datetime | None
+    field_research: bool = False  # 活動期間有專屬田野調查
+
+
+@dataclass
+class Research:
+    text: str          # 英文任務
+    rewards: list[str]  # 獎勵（寶可夢英文名或道具）
 
 
 @dataclass
@@ -83,9 +90,20 @@ def fetch_go_events() -> list[GoEvent]:
             url=e.get("link", ""),
             start=parse_time(e.get("start")),
             end=parse_time(e.get("end")),
+            field_research=bool(((e.get("extraData") or {}).get("generic") or {}).get("hasFieldResearchTasks")),
         )
         for e in _get(config.GO_EVENTS_URL).json()
     ]
+
+
+def fetch_field_research() -> list[Research]:
+    out = []
+    for r in _get(config.GO_RESEARCH_URL).json():
+        text = re.sub(r"<[^>]+>", "", r.get("text", "")).strip()
+        rewards = [x.get("name", "") for x in r.get("rewards") or [] if x.get("name")]
+        if text:
+            out.append(Research(text, rewards))
+    return out
 
 
 # ---------- PChome ----------
