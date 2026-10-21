@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: "0 17 * * *"  # 每天 UTC 17:00 = 台灣 01:00
   workflow_dispatch:
+  # PR 上只抓資料檢查來源是否正常，不送到 Apps Script
+  pull_request:
 
 concurrency:
   group: daily-board
@@ -26,7 +28,7 @@ jobs:
 
       - name: 抓資料並送到 Apps Script
         env:
-          GAS_INGEST_URL: ${{ secrets.GAS_INGEST_URL }}
+          GAS_INGEST_URL: ${{ github.event_name != 'pull_request' && secrets.GAS_INGEST_URL || '' }}
           GAS_INGEST_SECRET: ${{ secrets.GAS_INGEST_SECRET }}
         run: python -m scraper.main
 
