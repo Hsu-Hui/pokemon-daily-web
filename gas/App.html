@@ -244,12 +244,12 @@ function newsItem(n) {
     </a>`;
 }
 
-function renderOverview(d, errors) {
+function renderOverview(d) {
   const soonEvents = d.activeEvents.filter((e) => e.soon);
   const soonTasks = d.activeTasks.filter((g) => g.soon);
   const allItems = d.activeTasks.flatMap((g) => g.items);
   const fresh = d.products.filter(d.isNew);
-  return `${errors}
+  return `
     <div class="stats">
       <div class="card stat"><span class="muted">未完成活動</span><b>${d.activeEvents.filter((e) => !e.notStarted).length}</b></div>
       <div class="card stat"><span class="muted">24 小時內結束</span><b class="soon">${soonEvents.length}</b></div>
@@ -347,8 +347,7 @@ const RENDERERS = {
 
 function render() {
   renderTabs();
-  const errors = data.errors ? `<div class="notice">今天這些來源抓取失敗：${esc(data.errors)}</div>` : '';
-  document.getElementById('main').innerHTML = (RENDERERS[ui.tab] || renderOverview)(derive(), errors);
+  document.getElementById('main').innerHTML = (RENDERERS[ui.tab] || renderOverview)(derive());
 }
 
 // ---------- 事件 ----------

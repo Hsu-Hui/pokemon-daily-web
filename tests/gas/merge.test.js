@@ -46,3 +46,38 @@ test('doPost stores data with the right secret', () => {
   assert.strictEqual(res.ok, true);
   assert.strictEqual(sheets.products[0].id, 'p');
 });
+
+function post(gas, errors) {
+  const data = { generatedAt: now.toISOString(), events: [], taskGroups: [], products: [], news: [], errors };
+  return JSON.parse(gas.doPost({ postData: { contents: JSON.stringify({ secret: 'secret', data }) } }).text);
+}
+
+test('doPost sends one Discord message when sources failed', () => {
+  const { gas, fetched } = load({ scriptProps: { DISCORD_WEBHOOK_URL: 'https://discord/hook', VIEW_URL: 'https://view' } });
+  assert.strictEqual(post(gas, ['PChome（請求次數過多被限制）', '寶可夢官網（HTTP 503）']).ok, true);
+  assert.strictEqual(fetched.length, 1);
+  assert.match(fetched[0].body.content, /⚠️ 每日抓取有來源失敗：PChome（請求次數過多被限制）、寶可夢官網（HTTP 503）/);
+  assert.match(fetched[0].body.content, /<https:\/\/view>/);
+});
+
+test('doPost sends nothing when no source failed or no webhook', () => {
+  const withHook = load({ scriptProps: { DISCORD_WEBHOOK_URL: 'https://discord/hook' } });
+  post(withHook.gas, []);
+  assert.strictEqual(withHook.fetched.length, 0);
+  const noHook = load();
+  post(noHook.gas, ['PChome（連不上）']);
+  assert.strictEqual(noHook.fetched.length, 0);
+});
+
+test('doPost still answers ok when the webhook is down', () => {
+  const { gas } = load({ scriptProps: { DISCORD_WEBHOOK_URL: 'https://discord/hook' }, fetchThrows: true });
+  assert.strictEqual(post(gas, ['PChome（連不上）']).ok, true);
+});
+
+test('getData no longer returns errors', () => {
+  const { gas, sheets } = load();
+  sheets.meta = [{ key: 'updatedAt', value: now.toISOString() }, { key: 'errors', value: 'PChome（連不上）' }];
+  const out = gas.getData();
+  assert.ok(!('errors' in out));
+  assert.strictEqual(out.updatedAt, now.toISOString());
+});

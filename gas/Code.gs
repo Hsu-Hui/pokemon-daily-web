@@ -1,7 +1,7 @@
 /**
  * 寶可夢每日看板（Google Apps Script）
  *
- * - doPost：GitHub Actions 每天凌晨把爬到的資料送進來，存到這個試算表。
+ * - doPost：GitHub Actions 每天凌晨把爬到的資料送進來，存到這個試算表；有來源抓取失敗時發 Discord。
  * - doGet：看板網頁。
  * - remindTasks：每小時檢查，任務快結束還沒完成就發 Discord。
  *
@@ -106,7 +106,10 @@ function doPost(e) {
     const body = JSON.parse(e.postData.contents);
     const secret = PropertiesService.getScriptProperties().getProperty('INGEST_SECRET');
     if (!secret || body.secret !== secret) return json_({ ok: false, error: 'bad secret' });
-    return json_(ingest_(body.data || {}));
+    const data = body.data || {};
+    const result = ingest_(data);
+    notifyErrors_(data.errors || [], data.generatedAt);
+    return json_(result);
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message || err) });
   }
@@ -142,6 +145,26 @@ function ingest_(data) {
   }
 }
 
+/** 每日抓取有來源失敗時發一則 Discord；webhook 失敗只記錄，不影響接收資料。 */
+function notifyErrors_(errors, generatedAt) {
+  const props = PropertiesService.getScriptProperties();
+  const webhook = props.getProperty('DISCORD_WEBHOOK_URL');
+  if (!errors.length || !webhook) return;
+  const when = Utilities.formatDate(generatedAt ? new Date(generatedAt) : new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm');
+  const lines = [`⚠️ 每日抓取有來源失敗：${errors.join('、')}`, `抓取時間：${when}`];
+  const viewUrl = props.getProperty('VIEW_URL');
+  if (viewUrl) lines.push(`<${viewUrl}>`);
+  try {
+    UrlFetchApp.fetch(webhook, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ content: lines.join('\n').slice(0, 1900) }),
+    });
+  } catch (err) {
+    Logger.log('Discord 通知失敗：' + err);
+  }
+}
+
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -174,7 +197,6 @@ function getData() {
   const meta = readMeta_();
   return {
     updatedAt: meta.updatedAt || null,
-    errors: meta.errors || '',
     events: readRows_('events'),
     tasks: readRows_('tasks'),
     products: readRows_('products'),

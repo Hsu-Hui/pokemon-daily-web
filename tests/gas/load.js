@@ -26,6 +26,7 @@ function load(overrides = {}) {
       },
     },
     Logger: { log() {} },
+    Utilities: { formatDate: (d) => d.toISOString() },
   };
   vm.createContext(context);
   for (const file of ['Board.gs', 'Code.gs']) {

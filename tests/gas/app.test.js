@@ -62,3 +62,9 @@ test('search combines with source filter and resets to page 1', () => {
   app.render();
   assert.match(main.innerHTML, /找不到符合「不存在的商品」的商品/);
 });
+
+test('overview does not show source failures', () => {
+  const { app, main } = loadApp(sampleData({ errors: 'PChome（連不上）' }));
+  app.ui.tab = 'overview'; app.render();
+  assert.ok(!main.innerHTML.includes('抓取失敗'));
+});
