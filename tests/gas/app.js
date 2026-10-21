@@ -50,7 +50,7 @@ function sampleData(overrides = {}) {
       { id: 'p2', source: '官網', name: '寶可夢 伊布 馬克杯', url: 'u', price: '', image: '', firstSeen: iso(-2), media: '' },
     ],
     news: [{ id: 'n1', kind: 'event', title: '寶可夢嘉年華', url: 'u', source: '寶可夢官網', others: ['A 報'], published: iso(-3), firstSeen: iso(-1) }],
-    state: { done: {}, taskDone: {}, gaveUp: {} },
+    state: { taskDone: {}, gaveUp: {} },
     config: board,
   }, overrides);
 }

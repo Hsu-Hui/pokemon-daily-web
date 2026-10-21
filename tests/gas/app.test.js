@@ -68,3 +68,28 @@ test('overview does not show source failures', () => {
   app.ui.tab = 'overview'; app.render();
   assert.ok(!main.innerHTML.includes('抓取失敗'));
 });
+
+test('GO events have no done checkbox and ignore old done flags', () => {
+  const data = sampleData();
+  data.state.done = { e1: true };
+  const { app, main } = loadApp(data);
+  app.ui.tab = 'go'; app.render();
+  assert.ok(!main.innerHTML.includes('data-flag="done"'));
+  assert.ok(!main.innerHTML.includes('type="checkbox"'));
+  assert.ok(!main.innerHTML.includes('<th>完成</th>'));
+  assert.match(main.innerHTML, /聚焦時刻：皮卡丘/);
+  app.ui.tab = 'overview'; app.render();
+  assert.match(main.innerHTML, /進行中活動<\/span><b>1</);
+});
+
+test('ended events go to archive without restore', () => {
+  const data = sampleData();
+  const ended = new Date(Date.now() - 36e5).toISOString();
+  data.events.push({ id: 'old', name: '已結束的活動', type: '活動', category: '其他', url: 'u', start: ended, end: ended, firstSeen: ended });
+  const { app, main } = loadApp(data);
+  app.ui.tab = 'go'; app.render();
+  assert.ok(!main.innerHTML.includes('已結束的活動'));
+  app.ui.tab = 'archive'; app.render();
+  assert.match(main.innerHTML, /已結束的活動/);
+  assert.ok(!main.innerHTML.includes('>復原</button>'));
+});

@@ -33,12 +33,28 @@ Apps Script 提供的看板網頁，顯示活動、任務、新商品、台灣�
 #### Scenario: Overview content
 
 - **WHEN** 使用者在總覽頁
-- **THEN** 頁面 SHALL 顯示未完成且已開始的活動數、24 小時內結束的活動數、任務進度（完成項/全部項）、今天新商品數，「快結束了，還沒完成」清單（任務：結束前 4 小時內且未全部完成；活動：24 小時內結束），以及最多 8 件今天新上架商品
+- **THEN** 頁面 SHALL 顯示「進行中活動」（已開始且未結束的活動數）、24 小時內結束的活動數、任務進度（完成項/全部項）、今天新商品數，「快結束了，還沒完成」清單（任務：結束前 4 小時內且未全部完成；活動：24 小時內結束），以及最多 8 件今天新上架商品
+
+
+<!-- @trace
+source: remove-event-checkbox
+updated: 2026-10-22
+code:
+  - gas/App.html
+  - tests/gas/load.js
+  - README.md
+  - tests/gas/app.js
+  - gas/Code.gs
+  - gas/Styles.html
+tests:
+  - tests/gas/app.test.js
+  - tests/gas/merge.test.js
+-->
 
 ---
 ### Requirement: GO events tab
 
-GO 活動頁 SHALL 只列未完成且未結束的活動，提供六大分類的多選篩選（「全部」代表不篩選，並顯示每類數量），寬螢幕用表格、窄螢幕用卡片，顯示剩餘時間與進度條；不在六大分類的活動 SHALL 歸到「其他」。
+GO 活動頁 SHALL 列出所有未結束的活動，不提供完成勾選方塊；提供六大分類的多選篩選（「全部」代表不篩選，並顯示每類數量），寬螢幕用表格、窄螢幕用卡片，顯示剩餘時間與進度條；不在六大分類的活動 SHALL 歸到「其他」。
 
 #### Scenario: Multi-select categories
 
@@ -49,6 +65,27 @@ GO 活動頁 SHALL 只列未完成且未結束的活動，提供六大分類的�
 
 - **WHEN** 使用者沒有點排序
 - **THEN** 活動 SHALL 依類型（六大分類順序）→ 開始 → 結束排序；點類型/開始/結束 SHALL 以該欄優先排序，再點一次反向
+
+#### Scenario: No done checkbox
+
+- **WHEN** 使用者打開 GO 活動頁
+- **THEN** 表格與卡片 SHALL 沒有勾選方塊與「完成」欄，舊的活動完成紀錄 SHALL 不影響列表
+
+
+<!-- @trace
+source: remove-event-checkbox
+updated: 2026-10-22
+code:
+  - gas/App.html
+  - tests/gas/load.js
+  - README.md
+  - tests/gas/app.js
+  - gas/Code.gs
+  - gas/Styles.html
+tests:
+  - tests/gas/app.test.js
+  - tests/gas/merge.test.js
+-->
 
 ---
 ### Requirement: Tasks tab
@@ -88,12 +125,33 @@ GO 活動頁 SHALL 只列未完成且未結束的活動，提供六大分類的�
 ---
 ### Requirement: Archive tab
 
-封存頁 SHALL 列出已放棄或已結束的任務組，以及已完成或已結束的活動，並註明原因；尚未結束的已放棄任務組與已完成活動 SHALL 提供「復原」按鈕。
+封存頁 SHALL 列出已放棄或已結束的任務組，以及已結束的活動，並註明原因；尚未結束的已放棄任務組 SHALL 提供「復原」按鈕，活動 SHALL 沒有「復原」按鈕。
 
-#### Scenario: Restore a done event
+#### Scenario: Restore a given-up group
 
-- **WHEN** 使用者在封存頁對尚未結束的已完成活動按「復原」
-- **THEN** 該活動 SHALL 回到 GO 活動頁
+- **WHEN** 使用者在封存頁對尚未結束的已放棄任務組按「復原」
+- **THEN** 該任務組 SHALL 回到任務待辦頁
+
+#### Scenario: Ended event
+
+- **WHEN** 活動結束
+- **THEN** 該活動 SHALL 出現在封存頁並顯示「已結束 · <結束時間>」
+
+
+<!-- @trace
+source: remove-event-checkbox
+updated: 2026-10-22
+code:
+  - gas/App.html
+  - tests/gas/load.js
+  - README.md
+  - tests/gas/app.js
+  - gas/Code.gs
+  - gas/Styles.html
+tests:
+  - tests/gas/app.test.js
+  - tests/gas/merge.test.js
+-->
 
 ---
 ### Requirement: Pagination
