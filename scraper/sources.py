@@ -41,6 +41,7 @@ class News:
     source: str
     published: datetime | None
     others: list[str] = field(default_factory=list)  # 被合併的其他媒體
+    category: str = ""  # 官網的分類（活動、商品…）
 
 
 @dataclass
@@ -124,10 +125,13 @@ def fetch_pchome() -> list[Product]:
 # ---------- Google 新聞 ----------
 
 def _clean_title(title: str, source: str) -> str:
-    """Google 新聞標題後面會接「 - 媒體名稱」，拿掉。"""
+    """Google 新聞標題後面會接「 - 媒體名稱」，拿掉；也拿掉「討論牆 |」這類前綴和「- 遊戲新聞」分類尾巴。"""
     if source and title.endswith(" - " + source):
-        return title[: -len(source) - 3].strip()
-    return re.sub(r"\s+-\s+[^-]+$", "", title).strip()
+        title = title[: -len(source) - 3].strip()
+    else:
+        title = re.sub(r"\s+-\s+[^-]+$", "", title).strip()
+    title = re.sub(r"^討論牆\s*[|｜]\s*", "", title)
+    return re.sub(r"\s*[-－]\s*\S{2,6}新聞$", "", title).strip()
 
 
 def fetch_google_news(query: str, now: datetime) -> list[News]:
@@ -186,30 +190,56 @@ def dedupe_news(items: list[News], known_titles: list[str] = ()) -> list[News]:
 # ---------- 寶可夢台灣官網 ----------
 
 _DATE_RE = re.compile(r"(20\d{2})[./\-年](\d{1,2})[./\-月](\d{1,2})")
+_DATE_MDY_RE = re.compile(r"(\d{1,2})\.(\d{1,2})\.(20\d{2})")
+
+
+def _parse_date(text: str) -> datetime | None:
+    if m := _DATE_RE.search(text):
+        y, mo, d = int(m[1]), int(m[2]), int(m[3])
+    elif m := _DATE_MDY_RE.search(text):
+        mo, d, y = int(m[1]), int(m[2]), int(m[3])
+    else:
+        return None
+    try:
+        return datetime(y, mo, d, tzinfo=config.TZ)
+    except ValueError:
+        return None
 
 
 def parse_official_news(html: str, base_url: str) -> list[News]:
+    """官網列表每筆是一個 <a>，裡面有標題（可能出現兩次）、分類（活動、商品…）和日期。"""
     soup = BeautifulSoup(html, "html.parser")
     items, seen = [], set()
     for a in soup.find_all("a", href=True):
         url = urljoin(base_url, a["href"])
         if not re.search(r"/topics/[\w\-]+", url) or url.rstrip("/") == base_url.rstrip("/") or url in seen:
             continue
-        text = " ".join(a.get_text(" ", strip=True).split())
-        m = _DATE_RE.search(text)
-        title = _DATE_RE.sub("", text).strip(" ・|｜-")
-        if len(title) < 4:
+        raw = [" ".join(t.split()) for t in a.stripped_strings]
+        published = _parse_date(" ".join(raw))
+        parts = [_DATE_MDY_RE.sub("", _DATE_RE.sub("", p)).strip(" ・|｜-") for p in raw]
+        candidates = [p for p in parts if len(p) > 4]
+        if not candidates:
             continue
+        title = max(candidates, key=len)
+        category = next((p for p in parts if 1 < len(p) <= 4), "")
+        # 分類和標題擠在同一段文字時，分類在最後面
+        if not category and (m := re.match(r"^(.{5,}?)\s+(活動|商品|新聞|遊戲|卡牌|動畫|電影|公告|其他)$", title)):
+            title, category = m[1], m[2]
+        # 標題和摘要相同時會變成「A A」，只留一份
+        half = len(title) // 2
+        if len(title) % 2 == 1 and title[:half] == title[half + 1:]:
+            title = title[:half]
         seen.add(url)
-        published = datetime(int(m[1]), int(m[2]), int(m[3]), tzinfo=config.TZ) if m else None
-        items.append(News(id=url, title=title, url=url, source="寶可夢官網", published=published))
+        items.append(News(id=url, title=title, url=url, source="寶可夢官網", published=published, category=category))
     return items
 
 
-def fetch_official_news() -> list[News]:
+def fetch_official_news(now: datetime) -> list[News]:
     resp = _get(config.OFFICIAL_NEWS_URL)
     resp.encoding = resp.apparent_encoding or "utf-8"
-    return parse_official_news(resp.text, config.OFFICIAL_NEWS_URL)
+    oldest = now - timedelta(days=config.OFFICIAL_MAX_AGE_DAYS)
+    return [n for n in parse_official_news(resp.text, config.OFFICIAL_NEWS_URL)
+            if not n.published or n.published >= oldest.replace(hour=0, minute=0)]
 
 
 # ---------- 巴哈姆特任務 ----------
@@ -297,6 +327,8 @@ def parse_bahamut_post(html: str, url: str, sn: str, now: datetime) -> TaskGroup
     if not tasks:
         return None
     start, end = parse_period(text, posted)
+    if not end:
+        return None  # 置頂的資料整理串之類沒有活動時間，不是任務文
     return TaskGroup(f"bh-{sn}", _clean_post_title(title_el.get_text(strip=True)), url, start, end, tasks)
 
 

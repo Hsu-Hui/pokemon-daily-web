@@ -28,6 +28,8 @@ class NewsTests(unittest.TestCase):
 
     def test_google_title_suffix_removed(self):
         self.assertEqual(sources._clean_title("皮卡丘來了 - 自由時報", "自由時報"), "皮卡丘來了")
+        self.assertEqual(sources._clean_title("討論牆 | 皮卡丘變身聖誕樹 - LINE TODAY", "LINE TODAY"), "皮卡丘變身聖誕樹")
+        self.assertEqual(sources._clean_title("寶可夢中心聖誕商品亮相- 遊戲新聞 - PChome Online 新聞", "PChome Online 新聞"), "寶可夢中心聖誕商品亮相")
 
     def test_official_news_classified(self):
         product = sources.News("1", "寶可夢中心新商品發售", "u", "寶可夢官網", NOW)
@@ -56,6 +58,20 @@ class OfficialTests(unittest.TestCase):
         items = sources.parse_official_news(html, "https://tw.portal-pokemon.com/topics/")
         self.assertEqual([i.title for i in items], ["寶可夢中心台北 萬聖節商品發售", "寶可夢集換式卡牌比賽報名開始"])
         self.assertEqual(items[0].published.date().isoformat(), "2026-10-20")
+
+    def test_parse_topics_real_layout(self):
+        html = """<a href="/topics/abc"><p>【Pokémon Center TAIPEI】2026年10月入店方法說明</p>
+        <p>【Pokémon Center TAIPEI】2026年10月入店方法說明</p><span>商品</span><time>10.15.2026</time></a>"""
+        [item] = sources.parse_official_news(html, "https://tw.portal-pokemon.com/topics/")
+        self.assertEqual(item.title, "【Pokémon Center TAIPEI】2026年10月入店方法說明")
+        self.assertEqual(item.category, "商品")
+        self.assertEqual(item.published.date().isoformat(), "2026-10-15")
+        self.assertEqual(main.news_kind(item, "event"), "product")
+
+    def test_merged_title_halves(self):
+        html = '<a href="/topics/x">寶可夢嘉年華開跑 寶可夢嘉年華開跑 活動 09.24.2026</a>'
+        [item] = sources.parse_official_news(html, "https://tw.portal-pokemon.com/topics/")
+        self.assertEqual((item.title, item.category), ("寶可夢嘉年華開跑", "活動"))
 
 
 BAHAMUT_POST = """
@@ -88,6 +104,10 @@ class BahamutTests(unittest.TestCase):
 
     def test_post_without_tasks_is_skipped(self):
         html = BAHAMUT_POST.replace("捕捉", "").replace("轉動", "").replace("孵化", "").replace("使用", "")
+        self.assertIsNone(sources.parse_bahamut_post(html, "u", "1", NOW))
+
+    def test_pinned_post_without_period_is_skipped(self):
+        html = BAHAMUT_POST.replace("活動時間：10/17（五）10:00 ~ 10/21（二）20:00", "")
         self.assertIsNone(sources.parse_bahamut_post(html, "u", "1", NOW))
 
     def test_period_crosses_year(self):

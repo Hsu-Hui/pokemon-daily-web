@@ -30,7 +30,9 @@ PCHOME_IMAGE_HOST = "https://cs-a.ecimg.tw"
 
 # 寶可夢台灣官網的最新消息
 OFFICIAL_NEWS_URL = "https://tw.portal-pokemon.com/topics/"
-# 標題有這些字的官網消息歸到「新商品」，其他歸到「台灣活動」
+# 官網消息只收幾天內發布的（舊公告不算新消息）
+OFFICIAL_MAX_AGE_DAYS = 3
+# 分類或標題有這些字的官網消息歸到「新商品」，其他歸到「台灣活動」
 PRODUCT_WORDS = ["商品", "發售", "上市", "販售", "新品", "周邊", "週邊", "寶可夢中心"]
 
 # Google News RSS：只抓最近 24 小時

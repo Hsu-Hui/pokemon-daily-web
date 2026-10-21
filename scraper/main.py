@@ -62,7 +62,8 @@ def build_tasks(groups: list[sources.TaskGroup]) -> list[dict]:
 
 def news_kind(item: sources.News, default: str) -> str:
     if item.source == "寶可夢官網":
-        return "product" if any(w in item.title for w in config.PRODUCT_WORDS) else "event"
+        text = item.category + item.title
+        return "product" if any(w in text for w in config.PRODUCT_WORDS) else "event"
     return default
 
 
@@ -96,7 +97,7 @@ def collect(now: datetime) -> dict:
     events = safe("Pokémon GO 活動", sources.fetch_go_events, default=[])
     tasks = safe("巴哈姆特任務", sources.fetch_bahamut_tasks, now, default=[])
     products = safe("PChome", sources.fetch_pchome, default=[])
-    official = safe("寶可夢官網", sources.fetch_official_news, default=[])
+    official = safe("寶可夢官網", sources.fetch_official_news, now, default=[])
     pc_news = safe("寶可夢中心新聞", sources.fetch_google_news, config.NEWS_QUERIES["pc_taipei"], now, default=[])
     tw_news = safe("台灣活動新聞", sources.fetch_google_news, config.NEWS_QUERIES["tw_events"], now, default=[])
 
