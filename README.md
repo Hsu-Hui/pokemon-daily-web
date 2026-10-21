@@ -19,37 +19,46 @@
 | `gas/Index.html` | 看板網頁 |
 | `gas/appsscript.json` | Apps Script 設定（時區） |
 | `.github/workflows/daily.yml` | 每天 01:00 執行 |
+| `.github/workflows/deploy-gas.yml`、`scripts/deploy_gas.sh` | `gas/` 有改時自動部署到 Apps Script |
 
 ## 第一次設定（約 10 分鐘）
 
 ### 1. 建立試算表和 Apps Script
 
 1. 到 [Google 試算表](https://sheets.new) 建一個新的試算表，名稱隨意（例如「寶可夢看板資料」）。
-2. 上方選單 **擴充功能 → Apps Script**。
-3. 把預設的 `程式碼.gs` 內容全部刪掉，貼上本 repo 的 `gas/Code.gs`。
-4. 左邊「檔案」旁的 **＋ → HTML**，檔名輸入 `Index`（不用打 .html），內容貼上 `gas/Index.html`。
-5. 左邊齒輪 **專案設定**，勾「在編輯器中顯示『appsscript.json』資訊清單檔案」，回到編輯器把 `appsscript.json` 換成本 repo 的 `gas/appsscript.json`（時區設成台北）。
-6. 按儲存。
+2. 上方選單 **擴充功能 → Apps Script**，開啟後不用貼任何程式，按一下儲存。
+3. 左邊齒輪 **專案設定**，複製「指令碼 ID」。
 
-### 2. 執行一次 setup
+### 2. 讓 GitHub 可以自動部署
 
-1. 編輯器上方的函式選單選 `setup`，按 **執行**。
+程式碼由 GitHub Actions 用 Google 官方的 [clasp](https://github.com/google/clasp) 上傳，不用自己貼。
+
+1. 打開 [Apps Script 設定](https://script.google.com/home/usersettings)，把 **Google Apps Script API** 切成「開啟」。
+2. 在自己的電腦（要有 [Node.js](https://nodejs.org/)）開終端機執行：
+   ```bash
+   npx @google/clasp@2.4.2 login
+   ```
+   瀏覽器會跳出 Google 登入，選你的帳號並允許。完成後家目錄會多一個 `.clasprc.json`（Windows 在 `C:\Users\你的名字\.clasprc.json`，Mac 在 `~/.clasprc.json`）。
+3. 到這個 repo 的 **Settings → Secrets and variables → Actions → New repository secret** 新增：
+
+| 名稱 | 值 |
+|---|---|
+| `CLASPRC_JSON` | `.clasprc.json` 的完整內容（這是你的登入憑證，不要貼到別的地方） |
+| `GAS_SCRIPT_ID` | 步驟 1 的指令碼 ID |
+
+4. 到 **Actions → 部署 Apps Script → Run workflow** 跑一次。跑完在執行結果的摘要會看到兩個網址：「看板」（你自己開的）和「接收資料」（給 GitHub Actions 用）。
+
+之後只要 `gas/` 的檔案有改並合併到 main，就會自動上傳並更新這兩個部署，網址不會變。憑證不會定期過期，只有超過 6 個月沒用、改 Google 密碼或自己撤銷授權時才要重新 login 並更新 `CLASPRC_JSON`。
+
+### 3. 執行一次 setup
+
+1. 回到 Apps Script 編輯器（重新整理就會看到上傳的程式），上方函式選單選 `setup`，按 **執行**。
 2. 第一次會要求授權：選你的帳號 →「進階」→「前往（不安全）」→ 允許。這是你自己的程式，Google 對沒有送審的程式都會這樣顯示。
 3. 下方「執行記錄」會出現 `GAS_INGEST_SECRET（貼到 GitHub Secrets）：xxxx`，把這串密碼記下來。
 
 setup 會建立試算表分頁、產生接收資料用的密碼、設定每小時的 Discord 提醒。
 
-### 3. 部署兩個網址
-
-右上角 **部署 → 新增部署**，類型選 **網頁應用程式**，要部署兩次：
-
-| | 看板（你自己開的網址） | 接收資料（給 GitHub Actions 用） |
-|---|---|---|
-| 說明 | 看板 | 接收資料 |
-| 執行身分 | **存取網頁應用程式的使用者** | **我** |
-| 誰可以存取 | **只有我自己** | **所有人** |
-
-兩次部署完成後各會給一個網址（`https://script.google.com/macros/s/.../exec`），分別記下來。接收資料的網址有密碼保護，別人拿到網址也寫不進資料，打開也看不到看板。
+兩個部署的權限由自動部署設定好：看板是「存取網頁應用程式的使用者／只有我自己」，接收資料是「我／所有人」。接收資料的網址有密碼保護，別人拿到網址也寫不進資料，打開也看不到看板。如果你之前手動建過部署，說明要是「看板」和「接收資料」，自動部署才會更新同一個網址；說明不同的話會新建部署。
 
 ### 4. 設定 Discord 提醒
 
@@ -67,8 +76,8 @@ setup 會建立試算表分頁、產生接收資料用的密碼、設定每小�
 
 | 名稱 | 值 |
 |---|---|
-| `GAS_INGEST_URL` | 接收資料的網址 |
-| `GAS_INGEST_SECRET` | 步驟 2 的密碼 |
+| `GAS_INGEST_URL` | 步驟 2 摘要裡「接收資料」的網址 |
+| `GAS_INGEST_SECRET` | 步驟 3 的密碼 |
 
 ### 6. 測試
 
@@ -76,12 +85,12 @@ setup 會建立試算表分頁、產生接收資料用的密碼、設定每小�
 
 ## 之後更新程式
 
-改了 `gas/` 的檔案後，要把新內容貼回 Apps Script，再到 **部署 → 管理部署**，兩個部署都按鉛筆 → 版本選「新版本」→ 部署。網址不會變。
+合併到 main 後由「部署 Apps Script」自動上傳和更新部署，不用手動貼。要重新部署也可以到 Actions 手動 Run workflow。
 
 ## 給其他人使用
 
 1. 試算表右上角「共用」，把對方加成**檢視者**。
-2. **部署 → 管理部署**，看板那個部署的「誰可以存取」改成「任何已登入 Google 帳戶的使用者」。
+2. 把 `scripts/deploy_gas.sh` 最後一行的 `MYSELF` 改成 `ANYONE`（任何已登入 Google 帳戶的使用者），合併後會自動重新部署。不要在 Apps Script 管理部署裡手動改，下次自動部署會蓋回去。
 3. 把看板網址給對方。每個人的勾選紀錄各自分開。Discord 提醒只會依你自己的勾選紀錄發送。
 
 ## 調整
