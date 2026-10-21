@@ -186,11 +186,11 @@ function include(name) {
   return HtmlService.createHtmlOutputFromFile(name).getContent();
 }
 
-/** 每個人自己的勾選紀錄：done（活動）、taskDone（"任務組id#第幾項"）、gaveUp（任務組）。 */
+/** 每個人自己的勾選紀錄：taskDone（"任務組id#任務id"）、gaveUp（任務組）。舊版的 done（活動完成）不再使用。 */
 function loadState_() {
   const raw = PropertiesService.getUserProperties().getProperty('state');
   const state = raw ? JSON.parse(raw) : {};
-  return { done: state.done || {}, taskDone: state.taskDone || {}, gaveUp: state.gaveUp || {} };
+  return { taskDone: state.taskDone || {}, gaveUp: state.gaveUp || {} };
 }
 
 function getData() {
@@ -206,9 +206,9 @@ function getData() {
   };
 }
 
-/** 網頁呼叫：kind 是 done / taskDone / gaveUp，value 為 false 時取消。 */
+/** 網頁呼叫：kind 是 taskDone / gaveUp，value 為 false 時取消。 */
 function setFlag(kind, id, value) {
-  if (['done', 'taskDone', 'gaveUp'].indexOf(kind) < 0) throw new Error('bad kind');
+  if (['taskDone', 'gaveUp'].indexOf(kind) < 0) throw new Error('bad kind');
   const lock = LockService.getUserLock();
   lock.waitLock(10000);
   try {

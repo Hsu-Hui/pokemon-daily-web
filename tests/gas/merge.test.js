@@ -81,3 +81,9 @@ test('getData no longer returns errors', () => {
   assert.ok(!('errors' in out));
   assert.strictEqual(out.updatedAt, now.toISOString());
 });
+
+test('setFlag only accepts taskDone and gaveUp', () => {
+  const { gas } = load();
+  assert.throws(() => gas.setFlag('done', 'e1', true), /bad kind/);
+  assert.deepStrictEqual(Object.keys(gas.setFlag('gaveUp', 'g1', true)).sort(), ['gaveUp', 'taskDone']);
+});

@@ -18,7 +18,7 @@ function load(overrides = {}) {
       getScriptProperties: () => ({ getProperty: (k) => (k in props ? props[k] : null) }),
       getUserProperties: () => ({ getProperty: () => null, setProperty() {} }),
     },
-    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }), getUserLock: () => ({ waitLock() {}, releaseLock() {} }) },
     UrlFetchApp: {
       fetch: (url, options) => {
         if (overrides.fetchThrows) throw new Error('webhook down');
