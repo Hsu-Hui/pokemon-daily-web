@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "gas/**"
+      - "shared/board.json"
       - "scripts/deploy_gas.sh"
       - ".github/workflows/deploy-gas.yml"
   workflow_dispatch:
