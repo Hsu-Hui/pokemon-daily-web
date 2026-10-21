@@ -20,6 +20,7 @@
 - **WHEN** 沒有獨立分類段落，而標題結尾是「 活動」「 商品」等分類字
 - **THEN** 系統 SHALL 把結尾分類字拆出來當分類
 
+---
 ### Requirement: Google News
 
 系統 SHALL 以 Google News RSS（zh-TW、TW）查詢兩組關鍵字：寶可夢中心新品（`pc_taipei`）與台灣寶可夢活動（`tw_events`），只收最近 24 小時、且標題（不分大小寫）含「寶可夢」「pokémon」「pokemon」「皮卡丘」「神奇寶貝」「ptcg」其中之一的新聞。
@@ -34,6 +35,7 @@
 - **WHEN** 標題結尾是「 - 媒體名稱」、開頭是「討論牆 |」或結尾是「- 遊戲新聞」這類分類
 - **THEN** 系統 SHALL 去掉這些前後綴
 
+---
 ### Requirement: Story dedupe
 
 系統 SHALL 依官網、寶可夢中心新聞、台灣活動新聞的順序合併後去重：兩則標題的 bigram 相似度（交集數 ÷ 較小集合數，比較前去掉空白與標點並轉小寫）達 0.45（`NEWS_SIMILARITY`）以上視為同一則，只留先出現的那則，後來的媒體名稱（與保留者不同且未記錄過時）記在 `others`。
@@ -48,11 +50,17 @@
 - **WHEN** 官網公告與新聞報導是同一件事
 - **THEN** SHALL 保留官網版本
 
+---
 ### Requirement: News kind
 
-官網消息的分類或標題含「商品」「發售」「上市」「販售」「新品」「周邊」「週邊」「寶可夢中心」其中之一時 `kind` SHALL 為 `product`，否則為 `event`；寶可夢中心新聞為 `product`；台灣活動新聞為 `event`。每筆輸出 SHALL 包含 `id`、`kind`、`title`、`url`、`source`、`others`、`published`。
+官網消息的分類或標題含「商品」「發售」「上市」「販售」「新品」「周邊」「週邊」「寶可夢中心」其中之一時 `kind` SHALL 為 `product`，否則為 `event`；寶可夢中心新聞為 `product`；台灣活動新聞為 `event`。kind SHALL 在去重之前就決定，去重 SHALL 不修改輸入的新聞物件。去重後 `kind` 為 `product` 的消息 SHALL 轉成商品放進 payload 的 `products`（見 product-feed），payload 的 `news` SHALL 只包含 `event`。每筆 `news` 輸出 SHALL 包含 `id`、`kind`、`title`、`url`、`source`、`others`、`published`。
 
 #### Scenario: Official product announcement
 
 - **WHEN** 官網消息分類為「商品」
-- **THEN** `kind` SHALL 為 `product`
+- **THEN** 該消息 SHALL 出現在 payload 的 `products`，不出現在 `news`
+
+#### Scenario: Taiwan event news
+
+- **WHEN** 台灣活動新聞去重後保留
+- **THEN** 該新聞 SHALL 出現在 payload 的 `news`，`kind` 為 `event`
