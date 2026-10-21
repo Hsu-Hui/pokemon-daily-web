@@ -33,5 +33,6 @@ deploy() {
   [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "- $description：https://script.google.com/macros/s/$id/exec" >> "$GITHUB_STEP_SUMMARY"
 }
 
+python3 scripts/build_gas_config.py  # shared/board.json → gas/Board.gs
 deploy "接收資料" USER_DEPLOYING ANYONE_ANONYMOUS
 deploy "看板" USER_ACCESSING MYSELF

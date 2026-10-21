@@ -1,0 +1,41 @@
+{
+  "months": {
+    "January": "1月",
+    "February": "2月",
+    "March": "3月",
+    "April": "4月",
+    "May": "5月",
+    "June": "6月",
+    "July": "7月",
+    "August": "8月",
+    "September": "9月",
+    "October": "10月",
+    "November": "11月",
+    "December": "12月"
+  },
+  "meteors": {
+    "Orionids": "獵戶座",
+    "Leonids": "獅子座",
+    "Geminids": "雙子座",
+    "Perseids": "英仙座",
+    "Quadrantids": "象限儀座",
+    "Lyrids": "天琴座",
+    "Eta Aquariids": "寶瓶座η",
+    "Southern Delta Aquariids": "南寶瓶座δ",
+    "Draconids": "天龍座",
+    "Taurids": "金牛座"
+  },
+  "places": {
+    "Wild Area": "野外區域",
+    "City Safari": "城市狩獵",
+    "Mexico City": "墨西哥城",
+    "Los Angeles": "洛杉磯",
+    "London": "倫敦",
+    "Boston": "波士頓",
+    "Sendai • Tohoku": "仙台・東北",
+    "Global": "全球",
+    "Kaohsiung": "高雄",
+    "Taipei": "台北",
+    "Taiwan": "台灣"
+  }
+}

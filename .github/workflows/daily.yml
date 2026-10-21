@@ -26,6 +26,13 @@ jobs:
 
       - run: python -m unittest
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Apps Script 測試
+        run: node --test tests/gas/*.test.js
+
       - name: 抓資料並送到 Apps Script
         env:
           GAS_INGEST_URL: ${{ github.event_name != 'pull_request' && secrets.GAS_INGEST_URL || '' }}

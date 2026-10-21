@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import traceback
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -99,18 +100,25 @@ def news_kind(item: sources.News, default: str) -> str:
 
 def build_news(groups: list[tuple[str, list[sources.News]]]) -> list[dict]:
     """groups：(預設分類, 新聞)。全部一起去重，同一件事不同媒體只留一則。"""
-    tagged = [(kind, n) for kind, items in groups for n in items]
-    kept = sources.dedupe_news([n for _, n in tagged])
-    kind_of = {id(n): kind for kind, n in tagged}
+    tagged = [replace(n, kind=news_kind(n, kind)) for kind, items in groups for n in items]
     return [{
         "id": n.id,
-        "kind": news_kind(n, kind_of[id(n)]),
+        "kind": n.kind,
         "title": n.title,
         "url": n.url,
         "source": n.source,
         "others": n.others,
         "published": iso(n.published),
-    } for n in kept]
+    } for n in sources.dedupe_news(tagged)]
+
+
+def news_to_product(n: dict) -> dict:
+    """商品類的消息放到新商品頁：官網公告標成「官網」，其他是寶可夢中心的新聞。"""
+    official = n["source"] == "寶可夢官網"
+    return asdict(sources.Product(
+        id=n["id"], source="官網" if official else "寶可夢中心", name=n["title"], url=n["url"],
+        media="" if official else n["source"],
+    ))
 
 
 def collect(now: datetime) -> dict:
@@ -132,13 +140,14 @@ def collect(now: datetime) -> dict:
     pc_news = safe("寶可夢中心新聞", sources.fetch_google_news, config.NEWS_QUERIES["pc_taipei"], now, default=[])
     tw_news = safe("台灣活動新聞", sources.fetch_google_news, config.NEWS_QUERIES["tw_events"], now, default=[])
 
+    # 官網放最前面，重複時保留官網的版本
+    news = build_news([("event", official), ("product", pc_news), ("event", tw_news)])
     return {
         "generatedAt": now.isoformat(),
         "events": build_events(events, now),
         "taskGroups": build_tasks(tasks) + build_field_research(research, events, now),
-        "products": [p.__dict__ for p in products],
-        # 官網放最前面，重複時保留官網的版本
-        "news": build_news([("event", official), ("product", pc_news), ("event", tw_news)]),
+        "products": [asdict(p) for p in products] + [news_to_product(n) for n in news if n["kind"] == "product"],
+        "news": [n for n in news if n["kind"] == "event"],
         "errors": errors,
     }
 

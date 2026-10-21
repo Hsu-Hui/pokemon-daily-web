@@ -14,9 +14,11 @@
 
 | 路徑 | 用途 |
 |---|---|
-| `scraper/` | Python 爬蟲，`python -m scraper.main` |
+| `shared/board.json` | 爬蟲和 Apps Script 共用的設定：活動分類、提醒時間、保留天數 |
+| `scraper/` | Python 爬蟲，`python -m scraper.main`；每個來源一個檔案在 `scraper/sources/` |
 | `gas/Code.gs` | Apps Script：接收資料、網頁後端、Discord 提醒 |
-| `gas/Index.html` | 看板網頁 |
+| `gas/Board.gs` | 由 `shared/board.json` 產生（`python scripts/build_gas_config.py`），不要直接改 |
+| `gas/Index.html`、`gas/Styles.html`、`gas/App.html` | 看板網頁：版面、樣式、程式 |
 | `gas/appsscript.json` | Apps Script 設定（時區） |
 | `.github/workflows/daily.yml` | 每天 01:00 執行 |
 | `.github/workflows/deploy-gas.yml`、`scripts/deploy_gas.sh` | `gas/` 有改時自動部署到 Apps Script |
@@ -96,7 +98,8 @@ setup 會建立試算表分頁、產生接收資料用的密碼、設定每小�
 ## 調整
 
 - 來源網址、關鍵字、新聞相似度門檻：`scraper/config.py`
-- 保留天數、提醒時間（結束前幾小時）：`gas/Code.gs` 最上面的常數
+- 活動分類、保留天數、提醒時間（結束前幾小時）：`shared/board.json`，改完執行 `python scripts/build_gas_config.py` 更新 `gas/Board.gs`（忘了的話測試會失敗）
+- 月份、流星雨、地名的中文對照：`scraper/data/translations.json`
 - 抓資料時間：`.github/workflows/daily.yml` 的 `cron`（UTC 時間，台灣 = UTC+8）
 
 ## 已知限制
@@ -110,5 +113,6 @@ setup 會建立試算表分頁、產生接收資料用的密碼、設定每小�
 ```bash
 pip install -r requirements.txt
 python -m unittest
+node --test tests/gas/*.test.js   # Apps Script 的測試（要有 Node.js）
 python -m scraper.main   # 沒設 GAS_INGEST_URL 時只輸出 out/payload.json
 ```

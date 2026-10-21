@@ -1,8 +1,12 @@
+import importlib.util
 import unittest
 import unittest.mock
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from scraper import config, main, sources, translate
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 NOW = datetime(2026, 10, 21, 1, tzinfo=config.TZ)
@@ -23,9 +27,11 @@ class NewsTests(unittest.TestCase):
         self.assertEqual([k.source for k in kept], ["A 報", "C 報"])
         self.assertEqual(kept[0].others, ["B 報"])
 
-    def test_known_titles_are_skipped(self):
-        kept = sources.dedupe_news([news("寶可夢快閃店進駐高雄 為期兩週")], ["寶可夢快閃店進駐高雄，為期兩週"])
-        self.assertEqual(kept, [])
+    def test_dedupe_does_not_change_inputs(self):
+        items = [news("寶可夢快閃店進駐高雄 為期兩週", "A 報"), news("寶可夢快閃店進駐高雄，為期兩週", "B 報")]
+        kept = sources.dedupe_news(items)
+        self.assertEqual(kept[0].others, ["B 報"])
+        self.assertEqual([i.others for i in items], [[], []])
 
     def test_google_title_suffix_removed(self):
         self.assertEqual(sources._clean_title("皮卡丘來了 - 自由時報", "自由時報"), "皮卡丘來了")
@@ -38,7 +44,7 @@ class NewsTests(unittest.TestCase):
         <item><title>Pokémon Center TAIPEI 聖誕新品 - 上報</title><link>https://n/2</link><source>上報</source></item>
         </channel></rss>"""
         resp = type("R", (), {"content": rss.encode()})()
-        with unittest.mock.patch.object(sources, "_get", return_value=resp):
+        with unittest.mock.patch.object(sources.news, "_get", return_value=resp):
             items = sources.fetch_google_news("q", NOW)
         self.assertEqual([i.title for i in items], ["Pokémon Center TAIPEI 聖誕新品"])
 
@@ -57,6 +63,24 @@ class NewsTests(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0]["source"], "寶可夢官網")
         self.assertEqual(out[0]["others"], ["D 報"])
+
+    def test_product_news_becomes_product(self):
+        official = main.news_to_product({"id": "o", "title": "新商品發售", "url": "u", "source": "寶可夢官網"})
+        center = main.news_to_product({"id": "c", "title": "寶可夢中心台北聖誕新品", "url": "u", "source": "上報"})
+        self.assertEqual((official["source"], official["media"], official["price"]), ("官網", "", ""))
+        self.assertEqual((center["source"], center["name"], center["media"]), ("寶可夢中心", "寶可夢中心台北聖誕新品", "上報"))
+        self.assertEqual(set(center), {"id", "source", "name", "url", "price", "image", "media"})
+
+    def test_collect_splits_products_and_news(self):
+        official = [sources.News("o1", "寶可夢中心新商品發售", "u", "寶可夢官網", NOW, category="商品"),
+                    sources.News("o2", "寶可夢嘉年華活動開跑", "u", "寶可夢官網", NOW)]
+        with unittest.mock.patch.multiple(
+            sources, fetch_go_events=lambda: [], fetch_bahamut_tasks=lambda now: [], fetch_field_research=lambda: [],
+            fetch_pchome=lambda: [], fetch_official_news=lambda now: official, fetch_google_news=lambda q, now: [],
+        ):
+            payload = main.collect(NOW)
+        self.assertEqual([p["id"] for p in payload["products"]], ["o1"])
+        self.assertEqual([(n["id"], n["kind"]) for n in payload["news"]], [("o2", "event")])
 
 
 class OfficialTests(unittest.TestCase):
@@ -158,10 +182,8 @@ class EventTests(unittest.TestCase):
 
     def test_translate_still_works(self):
         self.assertEqual(translate.event_name("Charmander Community Day"), "小火龍社群日")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertEqual(translate.event_name("Pokémon GO Wild Area 2026: Sendai • Tohoku"), "Pokémon GO 野外區域 2026: 仙台・東北")
+        self.assertEqual(translate.event_name("Minior Showers: Orionids 2026"), "小隕星流星雨：獵戶座 2026")
 
 
 class FieldResearchTests(unittest.TestCase):
@@ -202,3 +224,16 @@ class CategoryTests(unittest.TestCase):
         }
         for (slug, name), cat in cases.items():
             self.assertEqual(translate.event_category(slug, name), cat, slug + name)
+
+
+class BoardTests(unittest.TestCase):
+    def test_board_gs_is_generated(self):
+        spec = importlib.util.spec_from_file_location("build_gas_config", ROOT / "scripts" / "build_gas_config.py")
+        build = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(build)
+        self.assertEqual((ROOT / "gas" / "Board.gs").read_text(encoding="utf-8"), build.render(),
+                         "shared/board.json 改過了，請執行 python scripts/build_gas_config.py")
+
+
+if __name__ == "__main__":
+    unittest.main()

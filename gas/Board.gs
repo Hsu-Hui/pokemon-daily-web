@@ -1,0 +1,34 @@
+// 由 scripts/build_gas_config.py 從 shared/board.json 產生，不要直接改這個檔案。
+const BOARD = {
+  "categories": [
+    {
+      "name": "聚焦時刻",
+      "keywords": []
+    },
+    {
+      "name": "極巨化/超極巨化",
+      "keywords": []
+    },
+    {
+      "name": "團體戰/超級團體戰",
+      "keywords": []
+    },
+    {
+      "name": "GO Pass",
+      "keywords": []
+    },
+    {
+      "name": "限時調查",
+      "keywords": []
+    },
+    {
+      "name": "其他",
+      "keywords": []
+    }
+  ],
+  "remindHours": 4,
+  "keepNewsDays": 7,
+  "keepProductDays": 7,
+  "keepArchiveDays": 30,
+  "keepSeenDays": 120
+};

@@ -3,6 +3,8 @@ import json
 import re
 from pathlib import Path
 
+from . import config
+
 # 寶可夢英文名 → 繁中名，來源 PokeAPI pokemon_species_names.csv
 _NAMES: dict[str, str] = json.loads(
     (Path(__file__).parent / "data" / "pokemon_names.json").read_text(encoding="utf-8")
@@ -30,17 +32,9 @@ TYPE_LABELS = {
     "season": "季節",
 }
 
-MONTHS = {
-    "January": "1月", "February": "2月", "March": "3月", "April": "4月",
-    "May": "5月", "June": "6月", "July": "7月", "August": "8月",
-    "September": "9月", "October": "10月", "November": "11月", "December": "12月",
-}
-
-METEORS = {
-    "Orionids": "獵戶座", "Leonids": "獅子座", "Geminids": "雙子座", "Perseids": "英仙座",
-    "Quadrantids": "象限儀座", "Lyrids": "天琴座", "Eta Aquariids": "寶瓶座η",
-    "Southern Delta Aquariids": "南寶瓶座δ", "Draconids": "天龍座", "Taurids": "金牛座",
-}
+# 月份、流星雨、地名等固定對照（依序取代）
+_LOOKUPS = json.loads((Path(__file__).parent / "data" / "translations.json").read_text(encoding="utf-8"))
+MONTHS, METEORS, PLACES = _LOOKUPS["months"], _LOOKUPS["meteors"], _LOOKUPS["places"]
 
 # 依序套用；先處理整句結構，再處理零散字詞
 PATTERNS = [
@@ -79,17 +73,6 @@ PATTERNS = [
     (r" +（", "（"),
     (r",? and ", "、"),
     (r", ", "、"),
-    (r"Wild Area", "野外區域"),
-    (r"City Safari", "城市狩獵"),
-    (r"Mexico City", "墨西哥城"),
-    (r"Los Angeles", "洛杉磯"),
-    (r"London", "倫敦"),
-    (r"Boston", "波士頓"),
-    (r"Sendai • Tohoku", "仙台・東北"),
-    (r"Global", "全球"),
-    (r"Kaohsiung", "高雄"),
-    (r"Taipei", "台北"),
-    (r"Taiwan", "台灣"),
 ]
 _PATTERNS = [(re.compile(p), r) for p, r in PATTERNS]
 
@@ -102,6 +85,8 @@ def event_name(name: str) -> str:
         text = text.replace(word, zh)
     for pattern, repl in _PATTERNS:
         text = pattern.sub(repl, text)
+    for word, zh in PLACES.items():
+        text = text.replace(word, zh)
     # 中文字和 X / Y 之間的空白拿掉，例如「超級噴火龍 X」→「超級噴火龍X」
     return re.sub(r"(?<=[一-鿿]) (?=[XY](?:$|、))", "", text)
 
@@ -111,7 +96,7 @@ def event_type(type_slug: str, heading: str) -> str:
 
 
 # 活動分類：看板上的分頁只分這幾類
-CATEGORIES = ["聚焦時刻", "極巨化/超極巨化", "團體戰/超級團體戰", "GO Pass", "限時調查", "其他"]
+CATEGORIES = [c["name"] for c in config.BOARD["categories"]]
 _CATEGORY_OF = {
     "pokemon-spotlight-hour": "聚焦時刻",
     "max-battles": "極巨化/超極巨化",
