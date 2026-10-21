@@ -1,23 +1,18 @@
 /**
  * 寶可夢每日看板（Google Apps Script）
  *
- * - doPost：GitHub Actions 每天凌晨把爬到的資料送進來，存到這個試算表。
+ * - doPost：GitHub Actions 每天凌晨把爬到的資料送進來，存到這個試算表；有來源抓取失敗時發 Discord。
  * - doGet：看板網頁。
  * - remindTasks：每小時檢查，任務快結束還沒完成就發 Discord。
  *
  * 勾選、放棄的紀錄存在每個人自己的 UserProperties，互不影響。
+ * 保留天數、提醒時間等設定在 shared/board.json（這裡用產生的 Board.gs 裡的 BOARD）。
  */
-
-const KEEP_NEWS_DAYS = 7;       // 新聞、活動公告保留天數
-const KEEP_PRODUCT_DAYS = 7;    // 新商品保留天數
-const KEEP_ARCHIVE_DAYS = 30;   // 已結束的活動、任務在封存頁保留天數
-const KEEP_SEEN_DAYS = 120;     // 記住看過的商品、新聞多久（避免刪掉後隔天又出現）
-const REMIND_HOURS = 4;         // 任務結束前幾小時開始提醒
 
 const SHEETS = {
   events: { name: '活動', headers: ['id', 'name', 'type', 'url', 'start', 'end', 'firstSeen', 'category'] },
   tasks: { name: '任務', headers: ['id', 'name', 'url', 'start', 'end', 'tasks', 'firstSeen'] },
-  products: { name: '商品', headers: ['id', 'source', 'name', 'url', 'price', 'image', 'firstSeen'] },
+  products: { name: '商品', headers: ['id', 'source', 'name', 'url', 'price', 'image', 'firstSeen', 'media'] },
   news: { name: '新聞', headers: ['id', 'kind', 'title', 'url', 'source', 'others', 'published', 'firstSeen'] },
   seen: { name: '已看過', headers: ['id', 'firstSeen'] },
   meta: { name: '狀態', headers: ['key', 'value'] },
@@ -89,7 +84,7 @@ function mergeTimed_(existing, incoming, now) {
   });
   existing.forEach((r) => {
     if (seen[r.id] || !r.end) return;
-    if (now - new Date(r.end) < KEEP_ARCHIVE_DAYS * DAY) out.push(r);
+    if (now - new Date(r.end) < BOARD.keepArchiveDays * DAY) out.push(r);
   });
   return out;
 }
@@ -105,25 +100,35 @@ function mergeFresh_(existing, incoming, seenMap, keepDays, now) {
   return existing.concat(added).filter((r) => now - new Date(r.firstSeen) < keepDays * DAY);
 }
 
+/** 格式錯誤、密碼不對或處理失敗都回 JSON，不回 Apps Script 的錯誤頁。 */
 function doPost(e) {
-  const body = JSON.parse(e.postData.contents);
-  const secret = PropertiesService.getScriptProperties().getProperty('INGEST_SECRET');
-  if (!secret || body.secret !== secret) return json_({ ok: false, error: 'bad secret' });
+  try {
+    const body = JSON.parse(e.postData.contents);
+    const secret = PropertiesService.getScriptProperties().getProperty('INGEST_SECRET');
+    if (!secret || body.secret !== secret) return json_({ ok: false, error: 'bad secret' });
+    const data = body.data || {};
+    const result = ingest_(data);
+    notifyErrors_(data.errors || [], data.generatedAt);
+    return json_(result);
+  } catch (err) {
+    return json_({ ok: false, error: String(err && err.message || err) });
+  }
+}
 
+function ingest_(data) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    const data = body.data;
     const now = new Date();
     const seenMap = {};
     readRows_('seen').forEach((r) => {
-      if (now - new Date(r.firstSeen) < KEEP_SEEN_DAYS * DAY) seenMap[r.id] = r.firstSeen;
+      if (now - new Date(r.firstSeen) < BOARD.keepSeenDays * DAY) seenMap[r.id] = r.firstSeen;
     });
 
     const events = mergeTimed_(readRows_('events'), data.events || [], now);
     const tasks = mergeTimed_(readRows_('tasks'), data.taskGroups || [], now);
-    const products = mergeFresh_(readRows_('products'), data.products || [], seenMap, KEEP_PRODUCT_DAYS, now);
-    const news = mergeFresh_(readRows_('news'), data.news || [], seenMap, KEEP_NEWS_DAYS, now);
+    const products = mergeFresh_(readRows_('products'), data.products || [], seenMap, BOARD.keepProductDays, now);
+    const news = mergeFresh_(readRows_('news'), data.news || [], seenMap, BOARD.keepNewsDays, now);
 
     writeRows_('events', events);
     writeRows_('tasks', tasks);
@@ -134,9 +139,29 @@ function doPost(e) {
       { key: 'updatedAt', value: data.generatedAt || now.toISOString() },
       { key: 'errors', value: (data.errors || []).join('、') },
     ]);
-    return json_({ ok: true, events: events.length, tasks: tasks.length, products: products.length, news: news.length });
+    return { ok: true, events: events.length, tasks: tasks.length, products: products.length, news: news.length };
   } finally {
     lock.releaseLock();
+  }
+}
+
+/** 每日抓取有來源失敗時發一則 Discord；webhook 失敗只記錄，不影響接收資料。 */
+function notifyErrors_(errors, generatedAt) {
+  const props = PropertiesService.getScriptProperties();
+  const webhook = props.getProperty('DISCORD_WEBHOOK_URL');
+  if (!errors.length || !webhook) return;
+  const when = Utilities.formatDate(generatedAt ? new Date(generatedAt) : new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm');
+  const lines = [`⚠️ 每日抓取有來源失敗：${errors.join('、')}`, `抓取時間：${when}`];
+  const viewUrl = props.getProperty('VIEW_URL');
+  if (viewUrl) lines.push(`<${viewUrl}>`);
+  try {
+    UrlFetchApp.fetch(webhook, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ content: lines.join('\n').slice(0, 1900) }),
+    });
+  } catch (err) {
+    Logger.log('Discord 通知失敗：' + err);
   }
 }
 
@@ -156,6 +181,11 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
+/** Index.html 用 <?!= include('Styles') ?> 把其他 HTML 檔接進來。 */
+function include(name) {
+  return HtmlService.createHtmlOutputFromFile(name).getContent();
+}
+
 /** 每個人自己的勾選紀錄：done（活動）、taskDone（"任務組id#第幾項"）、gaveUp（任務組）。 */
 function loadState_() {
   const raw = PropertiesService.getUserProperties().getProperty('state');
@@ -167,12 +197,12 @@ function getData() {
   const meta = readMeta_();
   return {
     updatedAt: meta.updatedAt || null,
-    errors: meta.errors || '',
     events: readRows_('events'),
     tasks: readRows_('tasks'),
     products: readRows_('products'),
     news: readRows_('news'),
     state: loadState_(),
+    config: BOARD,
   };
 }
 
@@ -203,7 +233,7 @@ function remindTasks() {
   readRows_('tasks').forEach((g) => {
     if (!g.end || state.gaveUp[g.id]) return;
     const left = new Date(g.end) - now;
-    if (left <= 0 || left > REMIND_HOURS * 3600 * 1000) return;
+    if (left <= 0 || left > BOARD.remindHours * 3600 * 1000) return;
     const todo = g.tasks.filter((t, i) => !state.taskDone[g.id + '#' + (t.id || i)]);
     if (!todo.length) return;
     const h = Math.floor(left / 3600000);

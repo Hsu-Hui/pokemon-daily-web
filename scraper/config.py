@@ -1,7 +1,12 @@
-"""可調整的設定：資料來源網址、關鍵字、時區、保留天數。"""
+"""可調整的設定：資料來源網址、關鍵字、時區。分類、提醒和保留天數在 shared/board.json。"""
+import json
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Asia/Taipei")
+
+# 爬蟲和 Apps Script 共用的設定（Apps Script 端是產生的 gas/Board.gs）
+BOARD = json.loads((Path(__file__).resolve().parent.parent / "shared" / "board.json").read_text(encoding="utf-8"))
 
 # Pokémon GO 活動（LeekDuck 資料，由 ScrapedDuck 整理成 JSON）
 GO_EVENTS_URL = "https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/events.min.json"
@@ -11,6 +16,8 @@ GO_RESEARCH_URL = "https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/r
 GO_SKIP_TYPES = {"season", "go-battle-league"}
 # 列出幾天內會開始的活動
 GO_LOOKAHEAD_DAYS = 14
+# 進行中的活動最多讀幾個 LeekDuck 活動頁找限時調查
+LEEKDUCK_MAX_PAGES = 20
 
 # 巴哈姆特 Pokémon GO 哈啦板：從【情報】文章抓任務和獎勵
 BAHAMUT_BOARD_URL = "https://forum.gamer.com.tw/B.php"

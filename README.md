@@ -2,21 +2,23 @@
 
 每天台灣時間凌晨 01:00 由 GitHub Actions 抓資料，存進 Google 試算表，用 Google Apps Script 做成網頁看板：
 
-- **GO 活動**：進行中和 14 天內開始的活動（LeekDuck / ScrapedDuck，名稱用字典翻成中文），分成聚焦時刻、極巨化/超極巨化、團體戰/超級團體戰、GO Pass、限時調查、其他六類，可多選；預設依類型 → 開始 → 結束排序，點標題可以改排序。
-- **任務待辦**：目前的田野調查任務和獎勵（LeekDuck / ScrapedDuck，翻成中文），加上巴哈姆特 Pokémon GO 哈啦板情報文裡的限時調查。任務結束前 4 小時還沒做完，每小時發一次 Discord 提醒；不想做可以按「放棄」。
-- **新商品**：PChome 24h 最新上架的寶可夢商品、寶可夢中心新品新聞、寶可夢官網的商品公告，來源可多選，可依價格或上架時間排序。7 天後自動移除。
+- **GO 活動**：進行中和 14 天內開始的活動（LeekDuck / ScrapedDuck，名稱用字典翻成中文），分成聚焦時刻、極巨化/超極巨化、團體戰/超級團體戰、GO Pass、限時調查、其他六類（名稱有分類關鍵字的也會歸進去），可多選；預設依類型 → 開始 → 結束排序，點標題可以改排序。
+- **任務待辦**：目前的田野調查任務和獎勵（LeekDuck / ScrapedDuck，翻成中文）、進行中活動在 LeekDuck 活動頁上的限時調查，加上巴哈姆特 Pokémon GO 哈啦板情報文裡的任務。任務結束前 4 小時還沒做完，每小時發一次 Discord 提醒；不想做可以按「放棄」。
+- **新商品**：PChome 24h 最新上架的寶可夢商品、寶可夢中心新品新聞、寶可夢官網的商品公告，來源可多選，可以搜尋商品名稱，可依價格或上架時間排序。7 天後自動移除。
 - **台灣活動**：寶可夢官網公告和最近 24 小時的新聞，同一件事被不同媒體報導只列一則。7 天後自動移除。
 - **封存**：已完成、已放棄或已結束的項目，按錯可以「復原」。
 
-每頁最多 25 筆，超過會分頁。勾選紀錄存在每個人自己的 Google 帳號（Apps Script 的 UserProperties），手機電腦同步，不同人互不影響。整個流程不使用 AI，不花 token。
+每頁最多 25 筆，超過會分頁。某個來源抓取失敗時，會發一則 Discord 訊息通知（不顯示在看板上）。勾選紀錄存在每個人自己的 Google 帳號（Apps Script 的 UserProperties），手機電腦同步，不同人互不影響。整個流程不使用 AI，不花 token。
 
 ## 檔案
 
 | 路徑 | 用途 |
 |---|---|
-| `scraper/` | Python 爬蟲，`python -m scraper.main` |
+| `shared/board.json` | 爬蟲和 Apps Script 共用的設定：活動分類、提醒時間、保留天數 |
+| `scraper/` | Python 爬蟲，`python -m scraper.main`；每個來源一個檔案在 `scraper/sources/` |
 | `gas/Code.gs` | Apps Script：接收資料、網頁後端、Discord 提醒 |
-| `gas/Index.html` | 看板網頁 |
+| `gas/Board.gs` | 由 `shared/board.json` 產生（`python scripts/build_gas_config.py`），不要直接改 |
+| `gas/Index.html`、`gas/Styles.html`、`gas/App.html` | 看板網頁：版面、樣式、程式 |
 | `gas/appsscript.json` | Apps Script 設定（時區） |
 | `.github/workflows/daily.yml` | 每天 01:00 執行 |
 | `.github/workflows/deploy-gas.yml`、`scripts/deploy_gas.sh` | `gas/` 有改時自動部署到 Apps Script |
@@ -62,6 +64,8 @@ setup 會建立試算表分頁、產生接收資料用的密碼、設定每小�
 
 ### 4. 設定 Discord 提醒
 
+任務快結束的提醒和「每日抓取有來源失敗」的通知都發到這個頻道。
+
 1. Discord 要收提醒的頻道 → **編輯頻道 → 整合 → Webhook → 新 Webhook** → **複製 Webhook 網址**。
 2. 回到 Apps Script 的 **專案設定 → 指令碼屬性 → 新增指令碼屬性**：
 
@@ -96,7 +100,9 @@ setup 會建立試算表分頁、產生接收資料用的密碼、設定每小�
 ## 調整
 
 - 來源網址、關鍵字、新聞相似度門檻：`scraper/config.py`
-- 保留天數、提醒時間（結束前幾小時）：`gas/Code.gs` 最上面的常數
+- 活動分類、保留天數、提醒時間（結束前幾小時）：`shared/board.json`，改完執行 `python scripts/build_gas_config.py` 更新 `gas/Board.gs`（忘了的話測試會失敗）
+- 月份、流星雨、地名的中文對照：`scraper/data/translations.json`
+- 活動分類的關鍵字：`shared/board.json` 每個分類的 `keywords`。活動類型對不到分類時，英文原名或中文名稱含哪個分類的關鍵字（英文不分大小寫）就歸到那一類，依分類順序取第一個符合的。例如想讓名稱有「Hour」的活動歸到聚焦時刻，就在「聚焦時刻」的 `keywords` 加上 `"Hour"`，再執行 `python scripts/build_gas_config.py`。
 - 抓資料時間：`.github/workflows/daily.yml` 的 `cron`（UTC 時間，台灣 = UTC+8）
 
 ## 已知限制
@@ -110,5 +116,6 @@ setup 會建立試算表分頁、產生接收資料用的密碼、設定每小�
 ```bash
 pip install -r requirements.txt
 python -m unittest
+node --test tests/gas/*.test.js   # Apps Script 的測試（要有 Node.js）
 python -m scraper.main   # 沒設 GAS_INGEST_URL 時只輸出 out/payload.json
 ```
