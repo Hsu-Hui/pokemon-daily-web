@@ -3,23 +3,43 @@ const BOARD = {
   "categories": [
     {
       "name": "聚焦時刻",
-      "keywords": []
+      "keywords": [
+        "Spotlight Hour",
+        "聚焦時刻"
+      ]
     },
     {
       "name": "極巨化/超極巨化",
-      "keywords": []
+      "keywords": [
+        "Max Battle",
+        "Max Monday",
+        "Dynamax",
+        "Gigantamax",
+        "極巨"
+      ]
     },
     {
       "name": "團體戰/超級團體戰",
-      "keywords": []
+      "keywords": [
+        "Raid",
+        "團體戰"
+      ]
     },
     {
       "name": "GO Pass",
-      "keywords": []
+      "keywords": [
+        "GO Pass"
+      ]
     },
     {
       "name": "限時調查",
-      "keywords": []
+      "keywords": [
+        "Timed Research",
+        "Special Research",
+        "Limited Research",
+        "限時調查",
+        "特別調查"
+      ]
     },
     {
       "name": "其他",

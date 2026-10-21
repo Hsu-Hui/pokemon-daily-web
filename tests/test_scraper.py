@@ -303,6 +303,31 @@ class CategoryTests(unittest.TestCase):
         for (slug, name), cat in cases.items():
             self.assertEqual(translate.event_category(slug, name), cat, slug + name)
 
+    def test_keywords_in_name(self):
+        # 規格 go-events「Six categories」的範例表
+        cases = [
+            ("event", "Dynamax Trails", "極巨化/超極巨化"),
+            ("event", "GO Pass: Halloween", "GO Pass"),
+            ("event", "Halloween 2026 Timed Research", "限時調查"),
+            ("event", "Shadow Raid Weekend", "團體戰/超級團體戰"),
+            ("event", "Fall Marathon: Buddy Trek", "其他"),
+            ("raid-day", "Chandelure Super Mega Raid Day", "團體戰/超級團體戰"),
+            ("community-day", "November Community Day", "其他"),
+        ]
+        for slug, name, cat in cases:
+            self.assertEqual(translate.event_category(slug, name, translate.event_name(name)), cat, name)
+
+    def test_chinese_keyword(self):
+        self.assertEqual(translate.event_category("event", "Something", "夜間團體戰"), "團體戰/超級團體戰")
+        self.assertEqual(translate.event_category("event", "go pass: november"), "GO Pass")
+
+    def test_added_keyword_takes_effect(self):
+        board = {**config.BOARD, "categories": [dict(c) for c in config.BOARD["categories"]]}
+        board["categories"][0]["keywords"] = board["categories"][0]["keywords"] + ["Hour"]
+        with unittest.mock.patch.dict(config.BOARD, board):
+            self.assertEqual(translate.event_category("event", "Pokémon Hour"), "聚焦時刻")
+        self.assertEqual(translate.event_category("event", "Pokémon Hour"), "其他")
+
 
 class BoardTests(unittest.TestCase):
     def test_board_gs_is_generated(self):

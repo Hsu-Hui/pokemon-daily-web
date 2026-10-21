@@ -116,15 +116,15 @@ _CATEGORY_OF = {
 }
 
 
-def event_category(type_slug: str, name: str = "") -> str:
+def event_category(type_slug: str, name: str = "", name_zh: str = "") -> str:
+    """先看 ScrapedDuck 的活動類型；對不到時，名稱（英文或中文）含哪個分類的關鍵字就歸到那類
+    （依 shared/board.json 的分類順序，取第一個符合的）。"""
     if type_slug in _CATEGORY_OF:
         return _CATEGORY_OF[type_slug]
-    if re.search(r"Timed Research|Special Research|Limited Research", name):
-        return "限時調查"
-    if re.search(r"Dynamax|Gigantamax|Max Battle|Max Monday", name):
-        return "極巨化/超極巨化"
-    if re.search(r"Raid", name):
-        return "團體戰/超級團體戰"
+    text = f"{name} {name_zh}".lower()
+    for category in config.BOARD["categories"]:
+        if any(k.lower() in text for k in category["keywords"]):
+            return category["name"]
     return "其他"
 
 

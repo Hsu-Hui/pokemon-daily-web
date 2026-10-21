@@ -100,6 +100,7 @@ setup 會建立試算表分頁、產生接收資料用的密碼、設定每小�
 - 來源網址、關鍵字、新聞相似度門檻：`scraper/config.py`
 - 活動分類、保留天數、提醒時間（結束前幾小時）：`shared/board.json`，改完執行 `python scripts/build_gas_config.py` 更新 `gas/Board.gs`（忘了的話測試會失敗）
 - 月份、流星雨、地名的中文對照：`scraper/data/translations.json`
+- 活動分類的關鍵字：`shared/board.json` 每個分類的 `keywords`。活動類型對不到分類時，英文原名或中文名稱含哪個分類的關鍵字（英文不分大小寫）就歸到那一類，依分類順序取第一個符合的。例如想讓名稱有「Hour」的活動歸到聚焦時刻，就在「聚焦時刻」的 `keywords` 加上 `"Hour"`，再執行 `python scripts/build_gas_config.py`。
 - 抓資料時間：`.github/workflows/daily.yml` 的 `cron`（UTC 時間，台灣 = UTC+8）
 
 ## 已知限制

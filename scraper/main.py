@@ -40,11 +40,12 @@ def build_events(events: list[sources.GoEvent], now: datetime) -> list[dict]:
             continue
         if (ev.end and ev.end < now) or (ev.start and ev.start > horizon):
             continue
+        name_zh = translate.event_name(ev.name)
         out.append({
             "id": ev.id,
-            "name": translate.event_name(ev.name),
+            "name": name_zh,
             "type": translate.event_type(ev.type, ev.heading),
-            "category": translate.event_category(ev.type, ev.name),
+            "category": translate.event_category(ev.type, ev.name, name_zh),
             "url": ev.url,
             "start": iso(ev.start),
             "end": iso(ev.end),
