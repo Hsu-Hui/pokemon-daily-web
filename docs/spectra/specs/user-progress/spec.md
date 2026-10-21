@@ -1,0 +1,43 @@
+# user-progress Specification
+
+## Purpose
+
+每個使用者自己的完成、勾選與放棄紀錄。對應 `gas/Code.gs` 的 `loadState_`、`setFlag` 與 `gas/Index.html` 的 `setFlag`、`derive`。
+
+## Requirements
+
+### Requirement: Per-user state
+
+勾選紀錄 SHALL 以 JSON 存在 Apps Script UserProperties 的 `state`，包含 `done`（活動 id）、`taskDone`（`<任務組id>#<任務id 或項目順序>`）與 `gaveUp`（任務組 id）。不同 Google 帳號的紀錄 SHALL 互不影響，同一帳號在不同裝置 SHALL 同步。
+
+#### Scenario: Two users
+
+- **WHEN** 使用者 A 勾選某活動完成
+- **THEN** 使用者 B 的看板 SHALL 不受影響
+
+### Requirement: Set flag
+
+`setFlag(kind, id, value)` SHALL 只接受 `done`、`taskDone`、`gaveUp`，其他值丟出錯誤；`value` 為真時設定、為假時刪除該 id，期間取得 user lock（最多等 10 秒），並回傳最新狀態。
+
+#### Scenario: Invalid kind
+
+- **WHEN** 呼叫 `setFlag('other', ...)`
+- **THEN** 系統 SHALL 丟出 `bad kind`
+
+### Requirement: Optimistic update
+
+網頁 SHALL 先在畫面上套用勾選並重畫，伺服器成功後以回傳狀態更新；失敗時 SHALL 還原原本的狀態並顯示「儲存失敗，請再試一次」。
+
+#### Scenario: Save fails
+
+- **WHEN** `setFlag` 呼叫失敗
+- **THEN** 勾選框 SHALL 回到原本狀態並顯示提示
+
+### Requirement: Derived status
+
+活動在已勾選完成或已結束時 SHALL 視為封存；任務組在已放棄或已結束時 SHALL 視為封存。任務組「快結束」的條件 SHALL 為剩餘時間大於 0、小於 4 小時、且尚未全部完成；活動「快結束」為剩餘時間小於 24 小時且已開始。
+
+#### Scenario: All tasks done
+
+- **WHEN** 任務組所有項目都勾選完成
+- **THEN** 該組 SHALL 顯示「全部完成」且不算快結束

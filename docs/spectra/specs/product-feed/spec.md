@@ -1,0 +1,34 @@
+# product-feed Specification
+
+## Purpose
+
+從 PChome 24h 搜尋 API 取得最新上架的寶可夢商品。對應 `scraper/sources.py` 的 `fetch_pchome`。寶可夢中心新聞與官網商品公告的部分由 news-feed 產生、在看板上併入新商品頁。
+
+## Requirements
+
+### Requirement: PChome search
+
+系統 SHALL 對「寶可夢」「Pokemon」兩個關鍵字各呼叫 PChome 搜尋 API（`sort=new/dc`，帶 PChome Referer），每個關鍵字最多翻 5 頁（`PCHOME_PAGES`），且不超過 API 回報的 `totalPage`。
+
+#### Scenario: Fewer pages available
+
+- **WHEN** API 回報 `totalPage` 為 2
+- **THEN** 該關鍵字 SHALL 只讀 2 頁
+
+### Requirement: Product filtering
+
+商品名稱 SHALL 包含 `PCHOME_NAME_KEYWORDS` 其中之一（不分大小寫），且依商品 Id 跨關鍵字去重；沒有 Id 的商品 SHALL 略過。
+
+#### Scenario: Unrelated search hit
+
+- **WHEN** 搜尋結果商品名稱不含任何寶可夢關鍵字
+- **THEN** 該商品 SHALL 不輸出
+
+### Requirement: Product fields
+
+每筆商品 SHALL 包含 `id`（`pchome:<Id>`）、`source`（`PChome`）、`name`、`url`（`https://24h.pchome.com.tw/prod/<Id>`）、`price`（整數價格格式化為 `$1,234`，否則空字串）與 `image`（`picB` 或 `picS` 接在 `https://cs-a.ecimg.tw/` 後，沒有時為空字串）。
+
+#### Scenario: Non-integer price
+
+- **WHEN** API 的 `price` 不是整數
+- **THEN** `price` SHALL 為空字串
