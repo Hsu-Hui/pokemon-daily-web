@@ -5,6 +5,8 @@ TZ = ZoneInfo("Asia/Taipei")
 
 # Pokémon GO 活動（LeekDuck 資料，由 ScrapedDuck 整理成 JSON）
 GO_EVENTS_URL = "https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/events.min.json"
+# 目前的田野調查任務和獎勵（LeekDuck，ScrapedDuck 整理）
+GO_RESEARCH_URL = "https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/research.min.json"
 # 不需要「完成」的活動類型（ScrapedDuck 的 eventType），不列出
 GO_SKIP_TYPES = {"season", "go-battle-league"}
 # 列出幾天內會開始的活動

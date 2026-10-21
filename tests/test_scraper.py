@@ -151,3 +151,43 @@ class EventTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FieldResearchTests(unittest.TestCase):
+    def test_translate_tasks_and_rewards(self):
+        self.assertEqual(translate.research_task("Catch 10 Ghost-type Pokémon"), "捕捉 10 隻幽靈屬性寶可夢")
+        self.assertEqual(translate.research_task("Make 3 Excellent Throws in a row"), "連續投出 3 次「非常棒」")
+        self.assertEqual(translate.research_task("Make 5 Great Curveball Throws in a row"), "連續投出 5 次「很棒曲球」")
+        self.assertEqual(translate.research_task("Spin 5 PokéStops or Gyms"), "轉動 5 個補給站或道館")
+        self.assertEqual(translate.research_task("Hatch an Egg"), "孵化 1 顆蛋")
+        self.assertEqual(translate.pokemon("Alolan Geodude"), "阿羅拉小拳石")
+        self.assertEqual(translate.pokemon("Spinda 4"), "晃晃斑 4")
+
+    def test_group_follows_event_with_field_research(self):
+        ev = sources.GoEvent("into-the-wild", "Into the Wild", "Event", "event", "u",
+                             NOW - timedelta(days=1), NOW + timedelta(days=3), field_research=True)
+        [g] = main.build_field_research([sources.Research("Trade a Pokémon", ["Haunter"])], [ev], NOW)
+        self.assertEqual(g["id"], "field-into-the-wild")
+        self.assertEqual(g["end"], ev.end.isoformat())
+        self.assertEqual(g["tasks"], [{"id": "trade-a-pok-mon", "text": "交換 1 隻寶可夢", "reward": "遇見 鬼斯通"}])
+
+    def test_group_without_event_ends_at_month_end(self):
+        [g] = main.build_field_research([sources.Research("Explore 2 km", [])], [], NOW)
+        self.assertEqual((g["id"], g["name"], g["end"][:16]), ("field-202610", "10 月田野調查", "2026-10-31T23:59"))
+        self.assertEqual(main.build_field_research([], [], NOW), [])
+
+
+class CategoryTests(unittest.TestCase):
+    def test_categories(self):
+        cases = {
+            ("pokemon-spotlight-hour", ""): "聚焦時刻",
+            ("max-mondays", ""): "極巨化/超極巨化",
+            ("raid-hour", ""): "團體戰/超級團體戰",
+            ("go-pass", ""): "GO Pass",
+            ("research", ""): "限時調查",
+            ("event", "Halloween Timed Research"): "限時調查",
+            ("community-day", ""): "其他",
+            ("event", "Fall Marathon"): "其他",
+        }
+        for (slug, name), cat in cases.items():
+            self.assertEqual(translate.event_category(slug, name), cat, slug + name)

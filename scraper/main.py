@@ -1,6 +1,7 @@
 """每天執行：抓資料、整理成 JSON，送到 Apps Script 存進 Google 試算表。"""
 import json
 import os
+import re
 import sys
 import traceback
 from datetime import datetime, timedelta
@@ -42,6 +43,7 @@ def build_events(events: list[sources.GoEvent], now: datetime) -> list[dict]:
             "id": ev.id,
             "name": translate.event_name(ev.name),
             "type": translate.event_type(ev.type, ev.heading),
+            "category": translate.event_category(ev.type, ev.name),
             "url": ev.url,
             "start": iso(ev.start),
             "end": iso(ev.end),
@@ -58,6 +60,34 @@ def build_tasks(groups: list[sources.TaskGroup]) -> list[dict]:
         "end": iso(g.end),
         "tasks": [{"text": t, "reward": r} for t, r in g.tasks],
     } for g in groups]
+
+
+def build_field_research(research: list[sources.Research], events: list[sources.GoEvent], now: datetime) -> list[dict]:
+    """目前的田野調查任務整理成一組。田野調查沒有固定期限：有活動專屬任務時，
+    以那個活動的結束時間當期限；否則以月底當期限（每月 1 日會換一批）。"""
+    if not research:
+        return []
+    active = [e for e in events if e.field_research and e.end and e.end > now and (not e.start or e.start <= now)]
+    if active:
+        ev = min(active, key=lambda e: e.end)
+        start, end, name = ev.start, ev.end, f"田野調查：{translate.event_name(ev.name)}"
+        gid = f"field-{ev.id}"
+    else:
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        nxt = (start + timedelta(days=32)).replace(day=1)
+        end, name, gid = nxt - timedelta(minutes=1), f"{now.month} 月田野調查", f"field-{now:%Y%m}"
+    tasks = []
+    for r in research:
+        rewards = "、".join(translate.pokemon(x) for x in r.rewards[:6])
+        tasks.append({
+            "id": re.sub(r"[^a-z0-9]+", "-", r.text.lower()).strip("-"),
+            "text": translate.research_task(r.text),
+            "reward": f"遇見 {rewards}" if rewards else "",
+        })
+    return [{
+        "id": gid, "name": name, "url": "https://leekduck.com/research/",
+        "start": iso(start), "end": iso(end), "tasks": tasks,
+    }]
 
 
 def news_kind(item: sources.News, default: str) -> str:
@@ -96,6 +126,7 @@ def collect(now: datetime) -> dict:
 
     events = safe("Pokémon GO 活動", sources.fetch_go_events, default=[])
     tasks = safe("巴哈姆特任務", sources.fetch_bahamut_tasks, now, default=[])
+    research = safe("田野調查", sources.fetch_field_research, default=[])
     products = safe("PChome", sources.fetch_pchome, default=[])
     official = safe("寶可夢官網", sources.fetch_official_news, now, default=[])
     pc_news = safe("寶可夢中心新聞", sources.fetch_google_news, config.NEWS_QUERIES["pc_taipei"], now, default=[])
@@ -104,7 +135,7 @@ def collect(now: datetime) -> dict:
     return {
         "generatedAt": now.isoformat(),
         "events": build_events(events, now),
-        "taskGroups": build_tasks(tasks),
+        "taskGroups": build_tasks(tasks) + build_field_research(research, events, now),
         "products": [p.__dict__ for p in products],
         # 官網放最前面，重複時保留官網的版本
         "news": build_news([("event", official), ("product", pc_news), ("event", tw_news)]),

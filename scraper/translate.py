@@ -108,3 +108,113 @@ def event_name(name: str) -> str:
 
 def event_type(type_slug: str, heading: str) -> str:
     return TYPE_LABELS.get(type_slug, heading)
+
+
+# 活動分類：看板上的分頁只分這幾類
+CATEGORIES = ["聚焦時刻", "極巨化/超極巨化", "團體戰/超級團體戰", "GO Pass", "限時調查", "其他"]
+_CATEGORY_OF = {
+    "pokemon-spotlight-hour": "聚焦時刻",
+    "max-battles": "極巨化/超極巨化",
+    "max-mondays": "極巨化/超極巨化",
+    "raid-battles": "團體戰/超級團體戰",
+    "raid-hour": "團體戰/超級團體戰",
+    "raid-day": "團體戰/超級團體戰",
+    "raid-weekend": "團體戰/超級團體戰",
+    "elite-raids": "團體戰/超級團體戰",
+    "super-mega-raid": "團體戰/超級團體戰",
+    "go-pass": "GO Pass",
+    "research": "限時調查",
+    "timed-research": "限時調查",
+    "special-research": "限時調查",
+    "limited-research": "限時調查",
+    "research-breakthrough": "限時調查",
+}
+
+
+def event_category(type_slug: str, name: str = "") -> str:
+    if type_slug in _CATEGORY_OF:
+        return _CATEGORY_OF[type_slug]
+    if re.search(r"Timed Research|Special Research|Limited Research", name):
+        return "限時調查"
+    if re.search(r"Dynamax|Gigantamax|Max Battle|Max Monday", name):
+        return "極巨化/超極巨化"
+    if re.search(r"Raid", name):
+        return "團體戰/超級團體戰"
+    return "其他"
+
+
+# ---------- 田野調查任務 ----------
+
+_FORMS = {"Alolan": "阿羅拉", "Galarian": "伽勒爾", "Hisuian": "洗翠", "Paldean": "帕底亞", "Shadow": "暗影", "Mega": "超級"}
+_TYPES = {
+    "Normal": "一般", "Fire": "火", "Water": "水", "Grass": "草", "Electric": "電", "Ice": "冰",
+    "Fighting": "格鬥", "Poison": "毒", "Ground": "地面", "Flying": "飛行", "Psychic": "超能力",
+    "Bug": "蟲", "Rock": "岩石", "Ghost": "幽靈", "Dragon": "龍", "Dark": "惡", "Steel": "鋼", "Fairy": "妖精",
+}
+_THROWS = {"Nice": "不錯", "Great": "很棒", "Excellent": "非常棒", "Curveball": "曲球"}
+
+
+def pokemon(name: str) -> str:
+    """獎勵寶可夢名稱，例如「Alolan Geodude」→「阿羅拉小拳石」、「Spinda 4」→「晃晃斑 4」。"""
+    form = ""
+    first, _, rest = name.partition(" ")
+    if first in _FORMS and rest:
+        form, name = _FORMS[first], rest
+    base, _, suffix = name.partition(" ")
+    zh = _NAMES.get(base)
+    if zh is None:
+        return form + event_name(name)
+    return form + zh + (" " + suffix if suffix else "")
+
+
+def _num(m: str | None) -> str:
+    return m if m and m.isdigit() else "1"
+
+
+def _throw(words: str) -> str:
+    parts = words.split()
+    return "".join(_THROWS.get(w, w) for w in parts if w != "Throws" and w != "Throw")
+
+
+_TYPE_ALT = "|".join(_TYPES)
+_RESEARCH = [
+    (rf"^Catch (\d+|an?) ({_TYPE_ALT})-type Pokémon$", lambda m: f"捕捉 {_num(m[1])} 隻{_TYPES[m[2]]}屬性寶可夢"),
+    (rf"^Catch (\d+|an?) ({_TYPE_ALT}) or ({_TYPE_ALT})-type Pokémon$",
+     lambda m: f"捕捉 {_num(m[1])} 隻{_TYPES[m[2]]}或{_TYPES[m[3]]}屬性寶可夢"),
+    (r"^Catch (\d+) different species of Pokémon$", lambda m: f"捕捉 {m[1]} 種不同的寶可夢"),
+    (r"^Catch (\d+|an?) Pokémon with Weather Boost$", lambda m: f"捕捉 {_num(m[1])} 隻受天氣加成的寶可夢"),
+    (r"^Catch (\d+|an?) Pokémon$", lambda m: f"捕捉 {_num(m[1])} 隻寶可夢"),
+    (r"^Catch (\d+|an?) (.+)$", lambda m: f"捕捉 {_num(m[1])} 隻{pokemon(m[2])}"),
+    (r"^Make (\d+|an?) ((?:Nice|Great|Excellent|Curveball| )+)Throws? in a row$", lambda m: f"連續投出 {_num(m[1])} 次「{_throw(m[2])}」"),
+    (r"^Make (\d+|an?) ((?:Nice|Great|Excellent|Curveball| )+)Throws?$", lambda m: f"投出 {_num(m[1])} 次「{_throw(m[2])}」"),
+    (r"^Win a three-star raid or higher$", lambda m: "在三星以上的團體戰中獲勝"),
+    (r"^Win (\d+|an?) raids?$", lambda m: f"在團體戰中獲勝 {_num(m[1])} 次"),
+    (r"^Win (\d+|an?) Max Battles?$", lambda m: f"在極巨對戰中獲勝 {_num(m[1])} 次"),
+    (r"^Explore (\d+) km$", lambda m: f"探索 {m[1]} 公里"),
+    (r"^Hatch (\d+|an?) Eggs?$", lambda m: f"孵化 {_num(m[1])} 顆蛋"),
+    (r"^Spin (\d+|an?) PokéStops? or Gyms?$", lambda m: f"轉動 {_num(m[1])} 個補給站或道館"),
+    (r"^Spin (\d+|an?) PokéStops?$", lambda m: f"轉動 {_num(m[1])} 個補給站"),
+    (r"^Take a snapshot of a wild Pokémon$", lambda m: "拍下野生寶可夢的照片"),
+    (r"^Take (\d+) snapshots? of (.+)$", lambda m: f"拍下 {m[1]} 張{m[2]}的照片"),
+    (r"^Evolve (\d+|an?) Pokémon$", lambda m: f"進化 {_num(m[1])} 隻寶可夢"),
+    (r"^Power up Pokémon (\d+) times?$", lambda m: f"強化寶可夢 {m[1]} 次"),
+    (r"^Earn (\d+|an?) Candy walking with your buddy$", lambda m: f"和夥伴一起走路獲得 {_num(m[1])} 顆糖果"),
+    (r"^Earn (\d+) Candies walking with your buddy$", lambda m: f"和夥伴一起走路獲得 {m[1]} 顆糖果"),
+    (r"^Earn (\d+) hearts with your buddy$", lambda m: f"和夥伴累積 {m[1]} 顆愛心"),
+    (r"^Send (\d+|an?) Gifts? and add a sticker to each$", lambda m: f"送出 {_num(m[1])} 個禮物並貼上貼圖"),
+    (r"^Send (\d+|an?) Gifts? to friends$", lambda m: f"送 {_num(m[1])} 個禮物給好友"),
+    (r"^Trade (\d+|an?) Pokémon$", lambda m: f"交換 {_num(m[1])} 隻寶可夢"),
+    (r"^Defeat (\d+|an?) Team GO Rocket Grunts?$", lambda m: f"打敗 {_num(m[1])} 個 GO 火箭隊手下"),
+    (r"^Battle in the GO Battle League (\d+) times?$", lambda m: f"在 GO 對戰聯盟對戰 {m[1]} 次"),
+    (r"^Use (\d+) berries to help catch Pokémon$", lambda m: f"使用 {m[1]} 顆莓果捕捉寶可夢"),
+    (r"^Use (\d+) (.+) Berries to help catch Pokémon$", lambda m: f"使用 {m[1]} 顆{m[2]}果捕捉寶可夢"),
+    (r"^Transfer (\d+) Pokémon$", lambda m: f"放生 {m[1]} 隻寶可夢"),
+]
+_RESEARCH = [(re.compile(p), f) for p, f in _RESEARCH]
+
+
+def research_task(text: str) -> str:
+    for pattern, fn in _RESEARCH:
+        if m := pattern.match(text):
+            return fn(m)
+    return event_name(text)
