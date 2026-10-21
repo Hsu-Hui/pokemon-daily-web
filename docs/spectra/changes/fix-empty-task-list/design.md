@@ -23,11 +23,11 @@ Task groups come from the monthly field research (ScrapedDuck `research.min.json
 
 ### Event research group shape
 
-Group `id = "ld-<eventID>"`, `name = "限時調查：<event_name(name)>"`, `url = link`, `start/end` from the event, tasks capped at 40. Each task: `text = research_task(english)`, `reward` = translated reward labels joined with 「、」 (`translate.reward`: Pokémon via `pokemon()`, items via `items` in `translations.json`, `×N` kept), `id = task_id(step, english)`.
+Group `id = "ld-<eventID>"`, `name = "限時調查：<event_name(name)>"`, `url = link`, `start/end` from the event, tasks capped at 40. Each task: `text = research_task(english)`, `reward` = translated reward labels joined with 「、」 (`translate.reward`: Pokémon via `pokemon()`, items via `items` in `translations.json`, `×N` kept), `id = task_id(step, english, n)`.
 
 ### Stable task ids by hash
 
-`task_id(*parts)` returns the first 10 hex chars of SHA-1 of the parts joined by `|`. Bahamut tasks use `task_id(text)`, LeekDuck tasks `task_id(step_name, text)`. The page already keys by `t.id || i`, so no page change is needed; existing Bahamut check marks (index-keyed) are lost once, which is acceptable because Bahamut never produced groups.
+`task_id(*parts)` returns the first 10 hex chars of SHA-1 of the parts joined by `|`. Bahamut tasks use `task_id(text)`, LeekDuck tasks `task_id(step_name, text, n)` where `n` counts repeats of the same text in the same step (LeekDuck lists e.g. four identical "Use a Star Piece" tasks). The page already keys by `t.id || i`, so no page change is needed; existing Bahamut check marks (index-keyed) are lost once, which is acceptable because Bahamut never produced groups.
 
 ### Full-date Bahamut periods
 
@@ -36,7 +36,7 @@ Group `id = "ld-<eventID>"`, `name = "限時調查：<event_name(name)>"`, `url 
 ## Implementation Contract
 
 - Behaviour: `payload.taskGroups` = Bahamut groups + LeekDuck event research groups + the field research group; every task has `id`, `text`, `reward`.
-- Interface: `sources.fetch_event_research(events, now) -> list[TaskGroup]`, `sources.parse_event_research(html) -> list[tuple[str, str, list[str]]]` (step, task, rewards), `translate.reward(label) -> str`, `main.task_id(*parts) -> str`; `TaskGroup.tasks` becomes `list[tuple[str, str, str]]` (id, text, reward).
+- Interface: `sources.fetch_event_research(events, now) -> list[tuple[GoEvent, steps]]` (translation into groups happens in `main.build_event_research`), `sources.parse_event_research(html) -> list[tuple[str, str, list[str]]]` (step, task, rewards), `translate.reward(label) -> str`, `sources.task_id(*parts) -> str`; `TaskGroup.tasks` becomes `list[tuple[str, str, str]]` (id, text, reward).
 - Failure modes: LeekDuck listing failure for a page → skipped with a log line; whole source failure → error `LeekDuck 限時調查（原因）` like other sources.
 - Acceptance: unit tests on fixture pages, `parse_period` full-date test, Bahamut announcement fixture yields `None`; `python -m unittest` passes.
 - Scope: in — the items above. Out — dashboard changes, reminder changes.

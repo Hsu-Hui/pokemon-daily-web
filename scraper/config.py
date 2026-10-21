@@ -16,6 +16,8 @@ GO_RESEARCH_URL = "https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/r
 GO_SKIP_TYPES = {"season", "go-battle-league"}
 # 列出幾天內會開始的活動
 GO_LOOKAHEAD_DAYS = 14
+# 進行中的活動最多讀幾個 LeekDuck 活動頁找限時調查
+LEEKDUCK_MAX_PAGES = 20
 
 # 巴哈姆特 Pokémon GO 哈啦板：從【情報】文章抓任務和獎勵
 BAHAMUT_BOARD_URL = "https://forum.gamer.com.tw/B.php"

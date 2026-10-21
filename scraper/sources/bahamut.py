@@ -6,9 +6,9 @@ import requests
 from bs4 import BeautifulSoup
 
 from .. import config
-from .dates import mkdate
+from .dates import at, mkdate
 from .http import _get
-from .models import TaskGroup
+from .models import TaskGroup, task_id
 
 
 _TASK_VERBS = re.compile(
@@ -22,9 +22,28 @@ _RANGE_RE = re.compile(
     r"[~～至到\-–]\s*"
     r"(?:(\d{1,2})\s*[/月]\s*(\d{1,2})\s*日?)?(?:[^\d\n]{0,12}?(\d{1,2}[:：]\d{2}))?"
 )
+# 有寫年份的期間，例如「台灣時間2026年11月9日10:00～2026年11月13日20:00」
+_FULL_RANGE_RE = re.compile(
+    r"(20\d{2})\s*[年/]\s*(\d{1,2})\s*[月/]\s*(\d{1,2})\s*日?\s*(?:[^\d~～至到\n]{0,6}?(\d{1,2}[:：]\d{2}))?\s*"
+    r"[~～至到\-–]\s*"
+    r"(?:(20\d{2})\s*[年/]\s*)?(?:(\d{1,2})\s*[月/]\s*(\d{1,2})\s*日?)?\s*(?:[^\d\n]{0,6}?(\d{1,2}[:：]\d{2}))?"
+)
+
+
+def _parse_full_period(m: re.Match) -> tuple[datetime | None, datetime | None]:
+    start = at(int(m[1]), int(m[2]), int(m[3]), m[4], "00:00")
+    if m[6]:
+        end = at(int(m[5] or m[1]), int(m[6]), int(m[7]), m[8], "23:59")
+    else:
+        end = at(int(m[1]), int(m[2]), int(m[3]), m[8], "23:59")
+    if start and end and end < start and not m[5]:
+        end = end.replace(year=end.year + 1)  # 「2026年12月30日～1月3日」
+    return start, end
 
 
 def parse_period(text: str, posted: datetime) -> tuple[datetime | None, datetime | None]:
+    if m := _FULL_RANGE_RE.search(text):
+        return _parse_full_period(m)
     m = _RANGE_RE.search(text)
     if not m:
         return None, None
@@ -46,6 +65,8 @@ def parse_tasks(text: str) -> list[tuple[str, str]]:
         line = _BULLET.sub("", raw).strip()
         if not line or len(line) > 80 or not _TASK_VERBS.search(line):
             continue
+        if line.endswith(("。", "！", "!")):
+            continue  # 完整句子是活動說明，不是任務
         parts = _REWARD_SEP.split(line, maxsplit=1)
         task = parts[0].strip(" ：:")
         reward = parts[1].strip() if len(parts) > 1 else ""
@@ -85,7 +106,8 @@ def parse_bahamut_post(html: str, url: str, sn: str, now: datetime) -> TaskGroup
     start, end = parse_period(text, posted)
     if not end:
         return None  # 置頂的資料整理串之類沒有活動時間，不是任務文
-    return TaskGroup(f"bh-{sn}", _clean_post_title(title_el.get_text(strip=True)), url, start, end, tasks)
+    title = _clean_post_title(title_el.get_text(strip=True))
+    return TaskGroup(f"bh-{sn}", title, url, start, end, [(task_id(t), t, r) for t, r in tasks])
 
 
 def parse_bahamut_list(html: str) -> list[tuple[str, str, str]]:

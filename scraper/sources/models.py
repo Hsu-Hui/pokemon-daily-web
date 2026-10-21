@@ -1,4 +1,5 @@
 """各來源共用的資料結構。"""
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -51,4 +52,9 @@ class TaskGroup:
     url: str
     start: datetime | None
     end: datetime | None
-    tasks: list[tuple[str, str]]  # (任務, 獎勵)
+    tasks: list[tuple[str, str, str]]  # (任務 id, 任務, 獎勵)
+
+
+def task_id(*parts: str) -> str:
+    """任務的固定 id：同樣的文字每天都得到同一個 id，勾選紀錄不會因為順序改變而對錯任務。"""
+    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:10]

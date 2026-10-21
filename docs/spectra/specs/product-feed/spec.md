@@ -2,7 +2,7 @@
 
 ## Purpose
 
-從 PChome 24h 搜尋 API 取得最新上架的寶可夢商品。對應 `scraper/sources.py` 的 `fetch_pchome`。寶可夢中心新聞與官網商品公告的部分由 news-feed 產生、在看板上併入新商品頁。
+從 PChome 24h 搜尋 API 取得最新上架的寶可夢商品。對應 `scraper/sources/` 的 `fetch_pchome`。寶可夢中心新聞與官網商品公告的部分由 news-feed 產生、在看板上併入新商品頁。
 
 ## Requirements
 

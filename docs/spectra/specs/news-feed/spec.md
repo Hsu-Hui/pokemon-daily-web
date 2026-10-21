@@ -2,7 +2,7 @@
 
 ## Purpose
 
-收集寶可夢台灣官網最新消息與 Google 新聞，去掉重複報導，分成「新商品」（product）與「台灣活動」（event）兩類。對應 `scraper/sources.py` 的 `parse_official_news`、`fetch_official_news`、`fetch_google_news`、`dedupe_news`、`similarity`，以及 `scraper/main.py` 的 `build_news`、`news_kind`。
+收集寶可夢台灣官網最新消息與 Google 新聞，去掉重複報導，分成「新商品」（product）與「台灣活動」（event）兩類。對應 `scraper/sources/` 的 `parse_official_news`、`fetch_official_news`、`fetch_google_news`、`dedupe_news`、`similarity`，以及 `scraper/main.py` 的 `build_news`、`news_kind`。
 
 ## Requirements
 

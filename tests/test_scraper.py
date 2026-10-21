@@ -7,6 +7,7 @@ from pathlib import Path
 from scraper import config, main, sources, translate
 
 ROOT = Path(__file__).resolve().parent.parent
+FIXTURES = ROOT / "tests" / "fixtures"
 
 
 NOW = datetime(2026, 10, 21, 1, tzinfo=config.TZ)
@@ -76,7 +77,7 @@ class NewsTests(unittest.TestCase):
                     sources.News("o2", "寶可夢嘉年華活動開跑", "u", "寶可夢官網", NOW)]
         with unittest.mock.patch.multiple(
             sources, fetch_go_events=lambda: [], fetch_bahamut_tasks=lambda now: [], fetch_field_research=lambda: [],
-            fetch_pchome=lambda: [], fetch_official_news=lambda now: official, fetch_google_news=lambda q, now: [],
+            fetch_event_research=lambda events, now: [], fetch_pchome=lambda: [], fetch_official_news=lambda now: official, fetch_google_news=lambda q, now: [],
         ):
             payload = main.collect(NOW)
         self.assertEqual([p["id"] for p in payload["products"]], ["o1"])
@@ -130,12 +131,20 @@ class BahamutTests(unittest.TestCase):
         self.assertEqual(g.name, "萬聖節活動 限時調查任務與獎勵")
         self.assertEqual(g.start, datetime(2026, 10, 17, 10, tzinfo=config.TZ))
         self.assertEqual(g.end, datetime(2026, 10, 21, 20, tzinfo=config.TZ))
-        self.assertEqual(g.tasks, [
+        self.assertEqual([(t, r) for _, t, r in g.tasks], [
             ("捕捉10隻幽靈屬性寶可夢", "星星沙×1000"),
             ("轉動5個補給站", "奇異糖果×3"),
             ("孵化2顆蛋", ""),
             ("使用5顆莓果", "超級球×10"),
         ])
+
+    def test_tasks_have_stable_ids(self):
+        g = sources.parse_bahamut_post(BAHAMUT_POST, "https://b/1", "1", NOW)
+        self.assertEqual(g.tasks[0][0], sources.task_id("捕捉10隻幽靈屬性寶可夢"))
+        self.assertEqual(sources.task_id("a"), sources.task_id("a"))
+        self.assertNotEqual(sources.task_id("a"), sources.task_id("b"))
+        [out] = main.build_tasks([g])
+        self.assertTrue(all(t["id"] for t in out["tasks"]))
 
     def test_post_without_tasks_is_skipped(self):
         html = BAHAMUT_POST.replace("捕捉", "").replace("轉動", "").replace("孵化", "").replace("使用", "")
@@ -153,6 +162,16 @@ class BahamutTests(unittest.TestCase):
     def test_single_day_period(self):
         start, end = sources.parse_period("10月25日 14:00 ~ 17:00", NOW)
         self.assertEqual((start.hour, end.day, end.hour), (14, 25, 17))
+
+    def test_full_date_period(self):
+        start, end = sources.parse_period("台灣時間2026年11月9日10:00～2026年11月13日20:00", NOW)
+        self.assertEqual((start, end), (datetime(2026, 11, 9, 10, tzinfo=config.TZ), datetime(2026, 11, 13, 20, tzinfo=config.TZ)))
+        start, end = sources.parse_period("2026年12月30日 10:00 ~ 1月3日", NOW)
+        self.assertEqual((start, end), (datetime(2026, 12, 30, 10, tzinfo=config.TZ), datetime(2027, 1, 3, 23, 59, tzinfo=config.TZ)))
+
+    def test_announcement_post_has_no_tasks(self):
+        html = (FIXTURES / "bahamut_announcement.html").read_text(encoding="utf-8")
+        self.assertIsNone(sources.parse_bahamut_post(html, "u", "1", NOW))
 
     def test_parse_list(self):
         html = """
@@ -208,6 +227,65 @@ class FieldResearchTests(unittest.TestCase):
         [g] = main.build_field_research([sources.Research("Explore 2 km", [])], [], NOW)
         self.assertEqual((g["id"], g["name"], g["end"][:16]), ("field-202610", "10 月田野調查", "2026-10-31T23:59"))
         self.assertEqual(main.build_field_research([], [], NOW), [])
+
+
+class EventResearchTests(unittest.TestCase):
+    def ev(self, eid, start, end, url="https://leekduck.com/events/x/", type_="research", name="adidas × Pokémon Timed Research"):
+        return sources.GoEvent(eid, name, "Research", type_, url, start, end)
+
+    def test_parse_timed_research_page(self):
+        steps = sources.parse_event_research((FIXTURES / "leekduck_timed_research.html").read_text(encoding="utf-8"))
+        self.assertEqual(steps[0], ("adidas Timed Research (1/3)", "Spin 10 PokéStops or Gyms", ["Razz Berry ×5"]))
+        self.assertEqual(len(steps), 3)
+
+    def test_page_without_research(self):
+        self.assertEqual(sources.parse_event_research((FIXTURES / "leekduck_no_research.html").read_text(encoding="utf-8")), [])
+
+    def test_only_active_events_are_read(self):
+        n = NOW
+        events = [
+            self.ev("now", n - timedelta(days=1), n + timedelta(days=1)),
+            self.ev("future", n + timedelta(days=3), n + timedelta(days=4)),
+            self.ev("ended", n - timedelta(days=3), n - timedelta(days=1)),
+            self.ev("season", n - timedelta(days=1), n + timedelta(days=9), type_="season"),
+        ]
+        html = (FIXTURES / "leekduck_timed_research.html").read_text(encoding="utf-8")
+        resp = type("R", (), {"text": html})()
+        with unittest.mock.patch.object(sources.leekduck, "_get", return_value=resp) as get:
+            found = sources.fetch_event_research(events, n)
+        self.assertEqual([ev.id for ev, _ in found], ["now"])
+        self.assertEqual(get.call_count, 1)
+
+    def test_group_shape(self):
+        ev = self.ev("adidas", NOW - timedelta(days=1), NOW + timedelta(days=30))
+        steps = sources.parse_event_research((FIXTURES / "leekduck_timed_research.html").read_text(encoding="utf-8"))
+        [g] = main.build_event_research([(ev, steps)])
+        self.assertEqual((g["id"], g["url"], g["end"]), ("ld-adidas", ev.url, ev.end.isoformat()))
+        self.assertTrue(g["name"].startswith("限時調查："))
+        self.assertEqual([(t["text"], t["reward"]) for t in g["tasks"]], [
+            ("轉動 10 個補給站或道館", "蔓莓果 ×5"),
+            ("捕捉 20 隻寶可夢", "薰香 ×3"),
+            ("捕捉 20 隻寶可夢", "路卡利歐超級能量 ×40"),
+        ])
+        ids = [t["id"] for t in g["tasks"]]
+        self.assertEqual(len(set(ids)), 3, "同樣的任務在不同步驟要有不同 id")
+        [g] = main.build_event_research([(ev, [("s", "Use a Star Piece", ["Stardust ×7740"])] * 4)])
+        self.assertEqual(len({t["id"] for t in g["tasks"]}), 4, "同一步驟重複的任務也要有不同 id")
+        self.assertEqual((g["tasks"][0]["text"], g["tasks"][0]["reward"]), ("使用 1 個星星碎片", "星星沙 ×7740"))
+        self.assertEqual(translate.research_task("Claim Reward!"), "領取獎勵")
+
+    def test_group_order(self):
+        bh = sources.TaskGroup("bh-1", "巴哈", "u", NOW, NOW + timedelta(days=1), [("i", "t", "r")])
+        ev = self.ev("adidas", NOW - timedelta(days=1), NOW + timedelta(days=30))
+        steps = [("s", "Catch 20 Pokémon", [])]
+        with unittest.mock.patch.multiple(
+            sources, fetch_go_events=lambda: [ev], fetch_bahamut_tasks=lambda now: [bh],
+            fetch_field_research=lambda: [sources.Research("Explore 2 km", [])],
+            fetch_event_research=lambda events, now: [(ev, steps)], fetch_pchome=lambda: [],
+            fetch_official_news=lambda now: [], fetch_google_news=lambda q, now: [],
+        ):
+            payload = main.collect(NOW)
+        self.assertEqual([g["id"] for g in payload["taskGroups"]], ["bh-1", "ld-adidas", "field-202610"])
 
 
 class CategoryTests(unittest.TestCase):

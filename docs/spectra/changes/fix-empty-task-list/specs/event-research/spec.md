@@ -29,7 +29,7 @@ Turn the Timed and Special Research listed on LeekDuck event pages into task gro
 
 ### Requirement: Event research group
 
-每個有任務的活動 SHALL 產生一個任務組：`id` 為 `ld-<活動id>`，名稱為 `限時調查：<中文活動名>`，`url` 為活動頁，開始與結束沿用活動，最多 40 項。每個任務 SHALL 有 `id`（步驟名稱與英文任務的雜湊）、翻譯後的 `text`，以及 `reward`：獎勵翻成中文（寶可夢查字典、道具查 `translations.json` 的 `items`，保留 ×數量，對不到保留英文）並以「、」連接。
+每個有任務的活動 SHALL 產生一個任務組：`id` 為 `ld-<活動id>`，名稱為 `限時調查：<中文活動名>`，`url` 為活動頁，開始與結束沿用活動，最多 40 項。每個任務 SHALL 有 `id`（步驟名稱、英文任務與該任務在同一步驟第幾次出現的雜湊，重複的任務 id 也不同）、翻譯後的 `text`，以及 `reward`：獎勵翻成中文（寶可夢查字典、道具查 `translations.json` 的 `items`，保留 ×數量，對不到保留英文）並以「、」連接。
 
 ##### Example: Translated task
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-從 ScrapedDuck（LeekDuck 資料）取得 Pokémon GO 活動，篩出進行中和即將開始的活動，翻成中文並分類。對應 `scraper/sources.py` 的 `fetch_go_events`、`parse_time` 與 `scraper/main.py` 的 `build_events`。
+從 ScrapedDuck（LeekDuck 資料）取得 Pokémon GO 活動，篩出進行中和即將開始的活動，翻成中文並分類。對應 `scraper/sources/` 的 `fetch_go_events`、`parse_time` 與 `scraper/main.py` 的 `build_events`。
 
 ## Requirements
 

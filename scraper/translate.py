@@ -34,7 +34,7 @@ TYPE_LABELS = {
 
 # 月份、流星雨、地名等固定對照（依序取代）
 _LOOKUPS = json.loads((Path(__file__).parent / "data" / "translations.json").read_text(encoding="utf-8"))
-MONTHS, METEORS, PLACES = _LOOKUPS["months"], _LOOKUPS["meteors"], _LOOKUPS["places"]
+MONTHS, METEORS, PLACES, ITEMS = _LOOKUPS["months"], _LOOKUPS["meteors"], _LOOKUPS["places"], _LOOKUPS["items"]
 
 # 依序套用；先處理整句結構，再處理零散字詞
 PATTERNS = [
@@ -185,14 +185,18 @@ _RESEARCH = [
     (r"^Power up Pokémon (\d+) times?$", lambda m: f"強化寶可夢 {m[1]} 次"),
     (r"^Earn (\d+|an?) Candy walking with your buddy$", lambda m: f"和夥伴一起走路獲得 {_num(m[1])} 顆糖果"),
     (r"^Earn (\d+) Candies walking with your buddy$", lambda m: f"和夥伴一起走路獲得 {m[1]} 顆糖果"),
+    (r"^Earn (\d+|an?) [Cc]andy while exploring with your buddy$", lambda m: f"和夥伴一起探索獲得 {_num(m[1])} 顆糖果"),
+    (r"^Earn (\d+) [Cc]andies while exploring with your buddy$", lambda m: f"和夥伴一起探索獲得 {m[1]} 顆糖果"),
     (r"^Earn (\d+) hearts with your buddy$", lambda m: f"和夥伴累積 {m[1]} 顆愛心"),
     (r"^Send (\d+|an?) Gifts? and add a sticker to each$", lambda m: f"送出 {_num(m[1])} 個禮物並貼上貼圖"),
     (r"^Send (\d+|an?) Gifts? to friends$", lambda m: f"送 {_num(m[1])} 個禮物給好友"),
     (r"^Trade (\d+|an?) Pokémon$", lambda m: f"交換 {_num(m[1])} 隻寶可夢"),
     (r"^Defeat (\d+|an?) Team GO Rocket Grunts?$", lambda m: f"打敗 {_num(m[1])} 個 GO 火箭隊手下"),
     (r"^Battle in the GO Battle League (\d+) times?$", lambda m: f"在 GO 對戰聯盟對戰 {m[1]} 次"),
-    (r"^Use (\d+) berries to help catch Pokémon$", lambda m: f"使用 {m[1]} 顆莓果捕捉寶可夢"),
+    (r"^Use (\d+) [Bb]erries to help catch Pokémon$", lambda m: f"使用 {m[1]} 顆莓果捕捉寶可夢"),
     (r"^Use (\d+) (.+) Berries to help catch Pokémon$", lambda m: f"使用 {m[1]} 顆{m[2]}果捕捉寶可夢"),
+    (r"^Use (\d+|an?) (.+)$", lambda m: f"使用 {_num(m[1])} 個{reward(m[2])}"),
+    (r"^Claim Reward!?$", lambda m: "領取獎勵"),
     (r"^Transfer (\d+) Pokémon$", lambda m: f"放生 {m[1]} 隻寶可夢"),
 ]
 _RESEARCH = [(re.compile(p), f) for p, f in _RESEARCH]
@@ -203,3 +207,18 @@ def research_task(text: str) -> str:
         if m := pattern.match(text):
             return fn(m)
     return event_name(text)
+
+
+def reward(label: str) -> str:
+    """LeekDuck 的獎勵標籤，例如「Razz Berry ×5」→「蔓莓果 ×5」、「Lucario Mega Energy ×40」→「路卡利歐超級能量 ×40」。"""
+    name, sep, qty = label.partition("×")
+    name, qty = name.strip(), qty.strip()
+    if name in ITEMS:
+        zh = ITEMS[name]
+    elif name.endswith(" Mega Energy"):
+        zh = pokemon(name[: -len(" Mega Energy")]) + "超級能量"
+    elif name.endswith(" Candy"):
+        zh = pokemon(name[: -len(" Candy")]) + "的糖果"
+    else:
+        zh = pokemon(name)
+    return f"{zh} ×{qty}" if sep else zh

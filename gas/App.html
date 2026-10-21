@@ -285,7 +285,7 @@ function renderGo(d) {
 function renderTasks(d) {
   const { items, pager } = paginate(d.activeTasks, 'tasks');
   return `
-    <div class="head"><h2>任務待辦</h2><span class="muted">田野調查來自 LeekDuck，限時調查來自巴哈姆特 Pokémon GO 哈啦板；結束前 ${REMIND_MS / HOUR} 小時還沒完成會發 Discord 提醒</span></div>
+    <div class="head"><h2>任務待辦</h2><span class="muted">田野調查和活動限時調查來自 LeekDuck，另外會讀巴哈姆特 Pokémon GO 哈啦板的情報；結束前 ${REMIND_MS / HOUR} 小時還沒完成會發 Discord 提醒</span></div>
     ${(items.map(taskGroupHtml).join('') || '<p class="muted">目前沒有任務</p>') + pager}`;
 }
 

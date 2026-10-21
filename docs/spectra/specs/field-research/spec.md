@@ -2,7 +2,7 @@
 
 ## Purpose
 
-把目前的田野調查任務（ScrapedDuck `research.min.json`）整理成一個任務組，翻成中文並給定期限。對應 `scraper/sources.py` 的 `fetch_field_research` 與 `scraper/main.py` 的 `build_field_research`。
+把目前的田野調查任務（ScrapedDuck `research.min.json`）整理成一個任務組，翻成中文並給定期限。對應 `scraper/sources/` 的 `fetch_field_research` 與 `scraper/main.py` 的 `build_field_research`。
 
 ## Requirements
 

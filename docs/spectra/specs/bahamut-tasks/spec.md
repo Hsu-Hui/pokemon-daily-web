@@ -2,7 +2,7 @@
 
 ## Purpose
 
-從巴哈姆特 Pokémon GO 哈啦板（bsn 29659）的【情報】文章擷取限時調查的任務、獎勵和期間。對應 `scraper/sources.py` 的 `fetch_bahamut_tasks`、`parse_bahamut_list`、`parse_bahamut_post`、`parse_tasks`、`parse_period`。
+從巴哈姆特 Pokémon GO 哈啦板（bsn 29659）的【情報】文章擷取限時調查的任務、獎勵和期間。對應 `scraper/sources/` 的 `fetch_bahamut_tasks`、`parse_bahamut_list`、`parse_bahamut_post`、`parse_tasks`、`parse_period`。
 
 ## Requirements
 

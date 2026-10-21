@@ -59,7 +59,7 @@ def build_tasks(groups: list[sources.TaskGroup]) -> list[dict]:
         "url": g.url,
         "start": iso(g.start),
         "end": iso(g.end),
-        "tasks": [{"text": t, "reward": r} for t, r in g.tasks],
+        "tasks": [{"id": i, "text": t, "reward": r} for i, t, r in g.tasks],
     } for g in groups]
 
 
@@ -89,6 +89,32 @@ def build_field_research(research: list[sources.Research], events: list[sources.
         "id": gid, "name": name, "url": "https://leekduck.com/research/",
         "start": iso(start), "end": iso(end), "tasks": tasks,
     }]
+
+
+def _step_task_ids(steps: list[tuple[str, str, list[str]]]) -> list[str]:
+    """同一步驟裡重複的任務（例如四個「Use a Star Piece」）加上第幾次出現，id 才不會撞在一起。"""
+    seen: dict[tuple[str, str], int] = {}
+    ids = []
+    for step, text, _ in steps:
+        n = seen[step, text] = seen.get((step, text), 0) + 1
+        ids.append(sources.task_id(step, text, str(n)))
+    return ids
+
+
+def build_event_research(found: list[tuple[sources.GoEvent, list[tuple[str, str, list[str]]]]]) -> list[dict]:
+    """LeekDuck 活動頁的限時調查：每個活動一組，期間跟著活動。"""
+    return [{
+        "id": f"ld-{ev.id}",
+        "name": f"限時調查：{translate.event_name(ev.name)}",
+        "url": ev.url,
+        "start": iso(ev.start),
+        "end": iso(ev.end),
+        "tasks": [{
+            "id": tid,
+            "text": translate.research_task(text),
+            "reward": "、".join(translate.reward(r) for r in rewards),
+        } for tid, (step, text, rewards) in zip(_step_task_ids(steps[:40]), steps[:40])],
+    } for ev, steps in found]
 
 
 def news_kind(item: sources.News, default: str) -> str:
@@ -135,6 +161,7 @@ def collect(now: datetime) -> dict:
     events = safe("Pokémon GO 活動", sources.fetch_go_events, default=[])
     tasks = safe("巴哈姆特任務", sources.fetch_bahamut_tasks, now, default=[])
     research = safe("田野調查", sources.fetch_field_research, default=[])
+    event_research = safe("LeekDuck 限時調查", sources.fetch_event_research, events, now, default=[])
     products = safe("PChome", sources.fetch_pchome, default=[])
     official = safe("寶可夢官網", sources.fetch_official_news, now, default=[])
     pc_news = safe("寶可夢中心新聞", sources.fetch_google_news, config.NEWS_QUERIES["pc_taipei"], now, default=[])
@@ -145,7 +172,7 @@ def collect(now: datetime) -> dict:
     return {
         "generatedAt": now.isoformat(),
         "events": build_events(events, now),
-        "taskGroups": build_tasks(tasks) + build_field_research(research, events, now),
+        "taskGroups": build_tasks(tasks) + build_event_research(event_research) + build_field_research(research, events, now),
         "products": [asdict(p) for p in products] + [news_to_product(n) for n in news if n["kind"] == "product"],
         "news": [n for n in news if n["kind"] == "event"],
         "errors": errors,

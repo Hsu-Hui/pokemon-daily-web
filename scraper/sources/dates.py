@@ -32,11 +32,19 @@ def parse_date(text: str) -> datetime | None:
         return None
 
 
-def mkdate(year: int, month: int, day: int, hm: str | None, default: str, ref: datetime) -> datetime | None:
+def at(year: int, month: int, day: int, hm: str | None, default: str) -> datetime | None:
+    """年月日加上「時:分」（沒寫時用 default），日期不合法時回傳 None。"""
     h, m = map(int, (hm or default).replace("：", ":").split(":"))
     try:
-        dt = datetime(year, month, day, min(h, 23), m, tzinfo=config.TZ)
+        return datetime(year, month, day, min(h, 23), m, tzinfo=config.TZ)
     except ValueError:
+        return None
+
+
+def mkdate(year: int, month: int, day: int, hm: str | None, default: str, ref: datetime) -> datetime | None:
+    """沒寫年份的日期：先用 ref 的年份，早於 ref 半年以上就算隔年。"""
+    dt = at(year, month, day, hm, default)
+    if dt is None:
         return None
     if dt < ref - timedelta(days=180):  # 跨年：12 月發文寫「1/5」
         dt = dt.replace(year=year + 1)
