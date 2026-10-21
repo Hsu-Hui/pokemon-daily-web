@@ -12,6 +12,8 @@ function loadApp(data) {
   const elements = {};
   const el = (id) => (elements[id] = elements[id] || { id, innerHTML: '', textContent: '', style: {}, focus() {} });
   const handlers = {};
+  const listeners = {};
+  const searchBox = { focused: false, caret: null, focus() { this.focused = true; }, setSelectionRange(a) { this.caret = a; } };
   const runner = {
     withSuccessHandler(fn) { handlers.success = fn; return runner; },
     withFailureHandler(fn) { handlers.failure = fn; return runner; },
@@ -22,9 +24,8 @@ function loadApp(data) {
     console, Intl, Date, setTimeout, clearTimeout,
     document: {
       getElementById: el,
-      addEventListener() {},
-      activeElement: null,
-      querySelector: () => null,
+      addEventListener(type, fn) { listeners[type] = fn; },
+      querySelector: (sel) => (sel === 'input[data-shopquery]' ? searchBox : null),
     },
     window: { scrollTo() {} },
     localStorage: { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } },
@@ -32,7 +33,7 @@ function loadApp(data) {
   };
   vm.createContext(context);
   vm.runInContext(code + '\n;this.__app = { ui, render, matchesQuery: typeof matchesQuery === "function" ? matchesQuery : null };', context);
-  return { app: context.__app, main: el('main'), elements };
+  return { app: context.__app, main: el('main'), elements, listeners, searchBox };
 }
 
 function sampleData(overrides = {}) {

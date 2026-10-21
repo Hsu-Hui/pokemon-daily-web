@@ -12,7 +12,7 @@ let CATEGORIES = [], REMIND_MS = 0, CONFIG = {};
 const SOURCES = ['PChome', '寶可夢中心', '官網'];
 const PAGE_SIZE = 25;
 // goCats、srcs 是多選，空陣列代表「全部」；goSort.key 為 null 時用預設排序（類型 → 開始 → 結束）
-const ui = { tab: 'overview', goCats: [], srcs: [], goSort: { key: null, dir: 1 }, shopSort: 'new', page: {} };
+const ui = { tab: 'overview', goCats: [], srcs: [], goSort: { key: null, dir: 1 }, shopSort: 'new', shopQuery: '', page: {} };
 let data = null;
 try { ui.tab = localStorage.getItem('tab') || 'overview'; } catch (e) {}
 
@@ -141,6 +141,9 @@ function sortButton(key, label) {
   const arrow = on ? (ui.goSort.dir > 0 ? '▲' : '▼') : '↕';
   return `<button type="button" class="th-sort" data-sort="${key}" aria-pressed="${on}">${label} <span aria-hidden="true">${arrow}</span></button>`;
 }
+
+// 商品名稱搜尋：不分大小寫，忽略前後空白；空字串代表不篩選
+const matchesQuery = (name, query) => String(name || '').toLowerCase().includes(String(query || '').trim().toLowerCase());
 
 const priceOf = (p) => { const n = parseInt(String(p.price || '').replace(/[^\d]/g, ''), 10); return isNaN(n) ? null : n; };
 function sortProducts(list) {
@@ -291,19 +294,23 @@ function renderTasks(d) {
 
 function renderShop(d) {
   const sel = ui.srcs;
-  const filtered = sel.length ? d.products.filter((p) => sel.includes(p.source)) : d.products;
+  const filtered = (sel.length ? d.products.filter((p) => sel.includes(p.source)) : d.products)
+    .filter((p) => matchesQuery(p.name, ui.shopQuery));
   const { items, pager } = paginate(sortProducts(filtered), 'shop');
+  const query = ui.shopQuery.trim();
+  const empty = query ? `找不到符合「${esc(query)}」的商品` : '沒有商品';
   const count = (c) => c === '全部' ? d.products.length : d.products.filter((p) => p.source === c).length;
   const sorts = [['new', '上架時間：新到舊'], ['old', '上架時間：舊到新'], ['priceDesc', '價格：高到低'], ['priceAsc', '價格：低到高']];
   return `
     <div class="head"><h2>新商品</h2><span class="muted">最近 ${CONFIG.keepProductDays} 天新上架，超過 ${CONFIG.keepProductDays} 天自動移除；來源可以多選</span></div>
     <div class="toolbar">
       <div class="pills grow" aria-label="來源">${pillsHtml(SOURCES, sel, 'src', count)}</div>
+      <input type="search" class="search" data-shopquery placeholder="搜尋商品名稱" aria-label="搜尋商品名稱" value="${esc(ui.shopQuery)}">
       <label class="muted" style="display:flex;gap:8px;align-items:center">排序
         <select data-shopsort>${sorts.map(([v, l]) => `<option value="${v}" ${v === ui.shopSort ? 'selected' : ''}>${l}</option>`).join('')}</select>
       </label>
     </div>
-    ${items.length ? `<div class="grid">${items.map((p) => productCard(p, d.isNew(p))).join('')}</div>${pager}` : '<p class="muted">沒有商品</p>'}`;
+    ${items.length ? `<div class="grid">${items.map((p) => productCard(p, d.isNew(p))).join('')}</div>${pager}` : `<p class="muted">${empty}</p>`}`;
 }
 
 function renderTw(d) {
@@ -365,6 +372,16 @@ document.addEventListener('change', (ev) => {
   const t = ev.target;
   if (t.matches('input[data-flag]')) setFlag(t.dataset.flag, t.dataset.id, t.checked);
   if (t.matches('select[data-shopsort]')) { ui.shopSort = t.value; ui.page.shop = 1; render(); }
+});
+// 搜尋框：每打一個字就重畫列表，重畫後把焦點和游標放回搜尋框
+document.addEventListener('input', (ev) => {
+  const t = ev.target;
+  if (!t.matches('input[data-shopquery]')) return;
+  const caret = t.selectionStart;
+  ui.shopQuery = t.value; ui.page.shop = 1;
+  render();
+  const box = document.querySelector('input[data-shopquery]');
+  if (box) { box.focus(); box.setSelectionRange(caret, caret); }
 });
 
 google.script.run
