@@ -129,6 +129,14 @@ def main() -> int:
         f"活動 {len(payload['events'])}、任務組 {len(payload['taskGroups'])}、"
         f"商品 {len(payload['products'])}、新聞 {len(payload['news'])}"
     )
+    for g in payload["taskGroups"]:
+        print(f"任務：{g['name']}（{g['start']} ~ {g['end']}）")
+        for t in g["tasks"][:5]:
+            print(f"  ・{t['text']} → {t['reward'] or '（無獎勵）'}")
+    for p in payload["products"][:3]:
+        print(f"商品：{p['name']}｜{p['price']}｜{p['image']}")
+    for n in payload["news"][:10]:
+        print(f"新聞[{n['kind']}]：{n['title']}｜{n['source']}｜另有 {len(n['others'])} 家")
     if payload["errors"]:
         print("失敗的來源：" + "、".join(payload["errors"]))
 
