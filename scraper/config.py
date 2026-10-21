@@ -44,6 +44,8 @@ NEWS_QUERIES = {
     "tw_events": '寶可夢 (活動 OR 快閃 OR 展覽 OR 聯名 OR 見面會 OR 嘉年華) 台灣 when:1d',
 }
 NEWS_MAX_AGE_HOURS = 24
+# 新聞標題要有其中一個字才收（Google 新聞會混進不相關的「新品」新聞）
+NEWS_TITLE_KEYWORDS = ["寶可夢", "pokémon", "pokemon", "皮卡丘", "神奇寶貝", "ptcg"]
 # 兩則標題的相似度超過這個值就當成同一則新聞
 NEWS_SIMILARITY = 0.45
 

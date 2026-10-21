@@ -168,6 +168,8 @@ def fetch_google_news(query: str, now: datetime) -> list[News]:
         published = parsedate_to_datetime(pub).astimezone(config.TZ) if pub else None
         if not title or not link or (published and published < oldest):
             continue
+        if not any(w in title.lower() for w in config.NEWS_TITLE_KEYWORDS):
+            continue
         items.append(News(
             id=(node.findtext("guid") or link).strip(),
             title=_clean_title(title, source),

@@ -1,4 +1,5 @@
 import unittest
+import unittest.mock
 from datetime import datetime, timedelta
 
 from scraper import config, main, sources, translate
@@ -30,6 +31,16 @@ class NewsTests(unittest.TestCase):
         self.assertEqual(sources._clean_title("皮卡丘來了 - 自由時報", "自由時報"), "皮卡丘來了")
         self.assertEqual(sources._clean_title("討論牆 | 皮卡丘變身聖誕樹 - LINE TODAY", "LINE TODAY"), "皮卡丘變身聖誕樹")
         self.assertEqual(sources._clean_title("寶可夢中心聖誕商品亮相- 遊戲新聞 - PChome Online 新聞", "PChome Online 新聞"), "寶可夢中心聖誕商品亮相")
+
+    def test_unrelated_news_skipped(self):
+        rss = """<rss><channel>
+        <item><title>群募新品登場 經發局辦體驗會 - 蕃新聞</title><link>https://n/1</link><source>蕃新聞</source></item>
+        <item><title>Pokémon Center TAIPEI 聖誕新品 - 上報</title><link>https://n/2</link><source>上報</source></item>
+        </channel></rss>"""
+        resp = type("R", (), {"content": rss.encode()})()
+        with unittest.mock.patch.object(sources, "_get", return_value=resp):
+            items = sources.fetch_google_news("q", NOW)
+        self.assertEqual([i.title for i in items], ["Pokémon Center TAIPEI 聖誕新品"])
 
     def test_official_news_classified(self):
         product = sources.News("1", "寶可夢中心新商品發售", "u", "寶可夢官網", NOW)
