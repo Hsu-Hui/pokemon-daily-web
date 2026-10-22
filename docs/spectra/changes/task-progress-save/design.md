@@ -1,48 +1,48 @@
-## Context
+## 背景
 
-Task check marks live in UserProperties (`state.taskDone`, keys `<groupId>#<taskId>`). `setFlag` saves one key per call and the page updates optimistically. Discord reminders read the saved state of the trigger owner.
+任務勾選紀錄存在 UserProperties（`state.taskDone`，key 是 `<任務組id>#<任務id>`）。`setFlag` 每次呼叫存一個 key，頁面先更新畫面再儲存。Discord 提醒讀的是觸發器擁有者已儲存的狀態。
 
-## Goals / Non-Goals
+## 目標／不做的事
 
-**Goals:**
+**目標：**
 
-- Ordered checking within a group.
-- One explicit save for task checks, with no silent loss of unsaved work.
-- Overview list based on a 48-hour window for tasks.
+- 同一任務組內依序勾選。
+- 任務勾選用一個明確的「儲存」送出，未儲存的變更不會默默不見。
+- 總覽清單以 48 小時判斷任務。
 
-**Non-Goals:**
+**不做的事：**
 
-- 放棄／復原 and favourites stay immediate (not part of the draft).
-- No change to the Discord reminder window (4 hours).
-- No ordering across different task groups.
+- 「放棄」「復原」和我的最愛維持按了就存（不放進草稿）。
+- Discord 提醒的時間範圍（4 小時）不變。
+- 不同任務組之間沒有順序關係。
 
-## Decisions
+## 決策
 
-### Ordered checking within a group
+### 任務組內依序勾選
 
-Order is the task list order shown on the page (LeekDuck step order, Bahamut post order, field research list order). Checking task N sets tasks 1..N to checked; unchecking task N sets N..end to unchecked. The rule applies to every task group, including monthly field research, unless Ryan decides otherwise (open question in the plan).
+順序就是頁面上的任務順序（LeekDuck 步驟順序、巴哈文章順序、田野調查清單順序）。勾第 N 項時把第 1～N 項設為已勾選；取消第 N 項時把第 N 項到最後設為未勾選。除非 Ryan 另外決定（計畫裡的待決定事項），這個規則套用到所有任務組，包含每月田野調查。
 
-### Draft and save bar
+### 草稿與儲存列
 
-`ui.draft` maps task keys to the new value; the page shows saved state overlaid with the draft. The bar is `position: sticky; top: 0` with the count and a 儲存 button (disabled when empty). Saving calls `saveTasks(draft)`; on success the returned state replaces `data.state` and the draft clears; on failure the draft stays and a toast says 「儲存失敗，請再試一次」. `beforeunload` warns when the draft is not empty. Tab switches keep the draft.
+`ui.draft` 記錄每個任務 key 的新值；頁面顯示「已儲存狀態＋草稿」。儲存列用 `position: sticky; top: 0`，顯示變更數量和「儲存」按鈕（沒有變更時停用）。按儲存呼叫 `saveTasks(draft)`；成功時用回傳的狀態取代 `data.state` 並清空草稿；失敗時保留草稿並顯示「儲存失敗，請再試一次」。草稿不是空的時候 `beforeunload` 會提醒。切換分頁保留草稿。
 
-### Batch save on the server
+### 伺服器一次儲存
 
-`saveTasks(changes)` validates that every key matches `<groupId>#<taskId>` and every value is boolean, takes the user lock once, applies all changes and returns the new state. `setFlag` stays for `gaveUp` only.
+`saveTasks(changes)` 檢查每個 key 都符合 `<任務組id>#<任務id>`、每個值都是布林值，取得一次 user lock，套用全部變更並回傳新狀態。`setFlag` 只留給 `gaveUp` 使用。
 
-### Overview task window
+### 總覽的任務時間範圍
 
-`shared/board.json` gains `overviewTaskHours: 48`. A group is listed when it is not given up, not ended, has unfinished tasks (saved state plus draft), and ends within that window. The event part of the list keeps the 24-hour rule.
+`shared/board.json` 新增 `overviewTaskHours: 48`。任務組沒放棄、沒結束、還有未完成的任務（已儲存狀態加上草稿），而且在這個時間內結束，就列出來。清單裡的活動部分維持 24 小時。
 
-## Implementation Contract
+## 實作約定
 
-- Behaviour: checking #20 in a group shows #1–#20 ticked and the bar counts the changed boxes; nothing is sent until 儲存; reload with a non-empty draft prompts; after saving the ticks persist on another device.
-- Interface: `saveTasks(changes: {[key]: boolean}) -> state`; `BOARD.overviewTaskHours`.
-- Failure modes: invalid keys or values → `bad change` error, nothing written; network failure → draft kept, toast shown.
-- Acceptance: node tests for ordered checking (check 20 → 1..20, check 5 → 1..5, uncheck 5 → 1..4 remain), draft count, save success/failure, `saveTasks` validation, overview 48-hour list; manual check of the sticky bar and leave warning.
-- Scope: in — ordering, draft/save, overview window. Out — favourites, layout fixes, reminder window.
+- 行為：在某組勾第 20 項，畫面上第 1～20 項打勾，儲存列顯示變更數量；按「儲存」前不會送出；草稿不是空的時候重新整理會先確認；儲存後在另一台裝置也看得到。
+- 介面：`saveTasks(changes: {[key]: boolean}) -> state`；`BOARD.overviewTaskHours`。
+- 失敗情況：key 或值不合法 → `bad change`，不寫入；網路失敗 → 保留草稿並提示。
+- 驗收：node 測試依序勾選（勾 20 → 1～20、勾 5 → 1～5、取消 5 → 剩 1～4）、變更數量、儲存成功／失敗、`saveTasks` 檢查、總覽 48 小時清單；手動檢查儲存列和離開確認。
+- 範圍：包含依序勾選、草稿／儲存、總覽時間範圍；不包含我的最愛、排版修正、提醒時間。
 
-## Risks / Trade-offs
+## 風險與取捨
 
-- [Field research tasks are not ordered in the game; auto-checking earlier ones is wrong there] → listed as a decision for Ryan; easy to limit to `ld-`/`bh-` groups.
-- [Unsaved ticks are lost if the phone kills the tab] → `beforeunload` cannot always fire on mobile; the bar makes unsaved state visible.
+- [遊戲裡田野調查沒有先後順序，自動勾前面的項目是錯的] → 列為請 Ryan 決定的事項；要改成只套用 `ld-`／`bh-` 任務組很容易。
+- [手機把分頁關掉時未儲存的勾選會不見] → 手機上 `beforeunload` 不一定會觸發；儲存列會一直顯示有未儲存的變更。

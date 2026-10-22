@@ -1,50 +1,50 @@
-## Context
+## 背景
 
-The dashboard is one Apps Script page (`gas/Index.html`, `Styles.html`, `App.html`). Layout was reviewed on 2026-10-22 by rendering the real 2026-10-21 payload in a local harness at 375, 768 and 1280 px.
+看板是一個 Apps Script 頁面（`gas/Index.html`、`Styles.html`、`App.html`）。2026-10-22 用 2026-10-21 的真實資料在本機測試頁，以 375、768、1280px 寬度檢查過排版。
 
-## Goals / Non-Goals
+## 目標／不做的事
 
-**Goals:**
+**目標：**
 
-- Remove events that have no end time.
-- No squeezed text on any tab at phone, tablet or desktop width.
-- No 領取獎勵 rows; no exact duplicate products.
+- 拿掉沒有結束時間的活動。
+- 手機、平板、電腦寬度下每個分頁都沒有被擠壓的文字。
+- 沒有「領取獎勵」，也沒有完全重複的商品。
 
-**Non-Goals:**
+**不做的事：**
 
-- Visual redesign, new colours or fonts.
-- Changing how the scraper picks sources.
+- 不重新設計外觀，不換顏色或字型。
+- 不改爬蟲挑選來源的方式。
 
-## Decisions
+## 決策
 
-### Drop events without an end time
+### 拿掉沒有結束時間的活動
 
-`build_events` skips events whose `end` is missing; `mergeTimed_` already removes stored rows that are absent from the new payload and have no end. The page's `derive()` also filters out events without `end` so a stale row can never show 「Infinity」. Alternative rejected: show 「未定」 and keep them — Ryan wants them gone, and in the observed data they are past events.
+`build_events` 略過沒有 `end` 的活動；`mergeTimed_` 原本就會刪掉「這次資料裡沒有、又沒有結束時間」的舊列。頁面的 `derive()` 也篩掉沒有 `end` 的活動，舊資料不會再顯示「Infinity」。放棄的做法：顯示「未定」並保留——Ryan 希望拿掉，而且觀察到的資料都是已經結束的活動。
 
-### Layout fixes per tab
+### 各分頁的排版修正
 
-- GO 活動 table: remove the `first-child` 56 px width rule; give the name column `min-width: 240px`, let 類型 size to its tag, keep 開始/結束 `nowrap` without extra width, 剩餘 fixed at 160 px.
-- Tab bar: one horizontal scrolling row on narrow screens instead of wrapping (seven tabs after favourites).
-- 任務待辦 rows: below 600 px the reward moves under the task text (full width); task-group header puts the title on its own line and 完成數/放棄 on the next.
-- Text containers (`.name`, task text, news titles, overview rows) use `min-width: 0` and `overflow-wrap: anywhere` so flex children can shrink without crushing.
-- Verification: a node test asserts the CSS no longer contains the `first-child` width rule, and a manual screenshot pass at 375/768/1280 px of all tabs.
+- GO 活動表格：拿掉 `first-child` 的 56px 寬度規則；名稱欄 `min-width: 240px`，類型欄依標籤寬度，開始／結束 `nowrap` 但不另外加寬，剩餘欄固定 160px。
+- 分頁列：窄螢幕改成單行、可橫向捲動，不換行（加了我的最愛後有七個分頁）。
+- 任務待辦列：寬度小於 600px 時，獎勵移到任務文字下方（整列寬度）；任務組標題獨占一行，完成數／放棄放下一行。
+- 文字容器（`.name`、任務文字、新聞標題、總覽清單）加上 `min-width: 0` 和 `overflow-wrap: anywhere`，彈性排版時可以縮小而不會被擠壓。
+- 驗證：node 測試確認 CSS 裡已沒有 `first-child` 寬度規則，並在 375／768／1280px 手動截圖檢查每個分頁。
 
-### Remove claim-reward rows
+### 略過領取獎勵
 
-`build_event_research` skips steps whose English text matches `^Claim Reward!?$`; `build_tasks` and `build_event_research` both skip tasks whose translated text is 「領取獎勵」. Task ids of the remaining tasks are unchanged because ids depend on step, text and occurrence only.
+`build_event_research` 略過英文符合 `^Claim Reward!?$` 的列；`build_tasks` 和 `build_event_research` 都略過翻譯後是「領取獎勵」的任務。其他任務的 id 只依步驟、文字和出現次數計算，所以不變。
 
-### Product dedupe key
+### 商品去重的鍵
 
-Key = name with whitespace collapsed and lower-cased + price string. `fetch_pchome` keeps the first product per key (results are newest first). `derive()` applies the same key to the stored list so duplicates already in the 商品 sheet disappear immediately; they also age out after 7 days.
+鍵 = 名稱（連續空白合併、轉小寫）＋價格字串。`fetch_pchome` 每個鍵只留第一筆（結果是新到舊排序）。`derive()` 對已存的清單套用同樣的鍵，所以「商品」分頁裡已經存的重複商品會馬上消失；它們也會在 7 天後過期。
 
-## Implementation Contract
+## 實作約定
 
-- Behaviour: no event without `end` in payload or page; no 「Infinity」 text; no 「領取獎勵」 task; one product per name+price.
-- Interface: `scraper.sources.pchome.product_key(name, price) -> str`; App.html `productKey(p)` with the same normalisation.
-- Acceptance: unittests for `build_events` (no-end event dropped), `build_event_research` (Claim Reward skipped), `fetch_pchome` (same name+price kept once); node tests for page dedupe and no 「Infinity」; manual screenshots at three widths.
-- Scope: in — the four problems above. Out — favourites, save button, sequential tasks.
+- 行為：每日資料和頁面都沒有缺 `end` 的活動；沒有「Infinity」字樣；沒有「領取獎勵」任務；同名同價的商品只有一筆。
+- 介面：`scraper.sources.pchome.product_key(name, price) -> str`；App.html 的 `productKey(p)` 用同樣的整理方式。
+- 驗收：`build_events`（沒有結束時間的活動被略過）、`build_event_research`（略過 Claim Reward）、`fetch_pchome`（同名同價只留一筆）的單元測試；頁面去重和沒有「Infinity」的 node 測試；三種寬度的手動截圖。
+- 範圍：包含上面四個問題；不包含我的最愛、儲存按鈕、任務依序勾選。
 
-## Risks / Trade-offs
+## 風險與取捨
 
-- [A real event with an unannounced end is hidden] → acceptable; ScrapedDuck lists upcoming events with dates, and the event reappears once it has an end.
-- [Two different products share name and price] → treated as one; PChome product names include set/size, so this is unlikely.
+- [真的還沒公布結束時間的活動被隱藏] → 可以接受；ScrapedDuck 列出即將開始的活動時都有日期，有結束時間後就會再出現。
+- [兩件不同商品剛好同名同價] → 會被當成一件；PChome 商品名稱通常含組合或尺寸，機率很低。

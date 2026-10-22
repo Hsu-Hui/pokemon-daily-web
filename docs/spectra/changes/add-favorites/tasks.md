@@ -1,9 +1,9 @@
-## 1. Server
+## 1. 伺服器
 
-- [ ] 1.1 "Snapshot per favourite in its own property" and "Immediate toggle" (Favorites storage requirement): `toggleFavorite(item, on)` with validation, 300-character trim, 500 cap, one property per item; `getData` returns `favorites`. Verify: node tests — on/off, `bad favorite`, cap, two users isolated, snapshot kept after the news row is removed.
+- [ ] 1.1 實作「每筆收藏各存一個屬性快照」和「按了立即儲存」（收藏儲存）：`toggleFavorite(item, on)`，含內容檢查、300 字截斷、500 筆上限、每筆一個屬性；`getData` 回傳 `favorites`。驗證：node 測試——收藏／取消、`bad favorite`、上限、兩個使用者互不影響、新聞列刪除後快照還在。
 
-## 2. Page
+## 2. 頁面
 
-- [ ] 2.1 "Star placement" (Star buttons requirement): ☆/★ buttons beside news items, product cards and overview new-product cards, optimistic toggle with revert on failure, clicks never open the link. Verify: node tests that every news item and product card has a star button outside its `<a>`, and the failure path reverts. [after: 1.1]
-- [ ] 2.2 "Favourites tab" (Favorites tab, Tabs requirements): seventh tab 我的最愛 between 台灣活動 and 封存 with two sections, pagination, 已下架 hint and empty state. Verify: node tests for both sections, sort order, 已下架, empty state; manual check on the deployed page. [after: 2.1]
-- [ ] 2.3 README: describe 我的最愛 and where favourites are stored. Verify: content review. [after: 2.2]
+- [ ] 2.1 實作「星號按鈕的位置」（星號按鈕）：新聞、商品卡片和總覽新商品卡片旁邊的 ☆／★，先更新畫面、失敗時還原，按星號不會打開連結。驗證：node 測試確認每則新聞和每張商品卡片都有在 `<a>` 外面的星號按鈕，並測試失敗時會還原。[after: 1.1]
+- [ ] 2.2 實作「我的最愛分頁」（我的最愛頁、分頁）：第七個分頁放在台灣活動和封存之間，兩區、分頁、「已下架」標示和沒有收藏時的提示。驗證：node 測試兩區、排序、「已下架」、沒有收藏時的提示；在部署後的頁面手動檢查。[after: 2.1]
+- [ ] 2.3 README 說明我的最愛和收藏存在哪裡。驗證：檢查內容。[after: 2.2]

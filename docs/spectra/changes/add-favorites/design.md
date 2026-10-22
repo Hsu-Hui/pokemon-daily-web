@@ -1,47 +1,47 @@
-## Context
+## 背景
 
-Per-user data already lives in UserProperties (`state`). Apps Script limits each property value to 9 KB and all user properties to 500 KB. News and product rows are deleted from the sheet 7 days after first seen.
+每個人的資料已經存在 UserProperties（`state`）。Apps Script 每個屬性值最多 9 KB，每個使用者的屬性總共最多 500 KB。新聞和商品在第一次出現 7 天後會從試算表刪除。
 
-## Goals / Non-Goals
+## 目標／不做的事
 
-**Goals:**
+**目標：**
 
-- Star/unstar news and products from their tabs and from 我的最愛.
-- Favourites survive the 7-day cleanup.
+- 可以在原本的分頁和我的最愛裡收藏／取消收藏新聞和商品。
+- 收藏不受 7 天清除影響。
 
-**Non-Goals:**
+**不做的事：**
 
-- Favourites for GO events or tasks.
-- Sharing favourites between users.
-- Notes, folders or sorting options on 我的最愛.
+- 不收藏 GO 活動或任務。
+- 不和其他使用者共用收藏。
+- 我的最愛不做筆記、資料夾或排序選項。
 
-## Decisions
+## 決策
 
-### Snapshot per favourite in its own property
+### 每筆收藏各存一個屬性快照
 
-Each favourite is stored as UserProperties key `fav:<kind>:<sha-1 of id, 16 hex>` with a JSON snapshot `{kind, id, title, url, source, media, price, image, date, starredAt}` (`kind` is `news` or `product`). One property per item avoids the 9 KB single-value limit; at about 400 bytes per item, 500 favourites use about 200 KB of the 500 KB quota (estimate; confirm by measuring one stored snapshot). A cap of 500 favourites returns 「我的最愛已滿」. Alternative rejected: keep only ids — starred items would vanish after 7 days.
+每筆收藏存成 UserProperties 的 `fav:<種類>:<id 的 sha-1 前 16 碼>`，內容是 JSON 快照 `{kind, id, title, url, source, media, price, image, date, starredAt}`（`kind` 是 `news` 或 `product`）。每筆一個屬性，避開單一值 9 KB 的限制；每筆約 400 bytes，500 筆約用 200 KB，在 500 KB 額度內（這是估計值，實作時存一筆實際量測確認）。超過 500 筆時回傳「我的最愛已滿」。放棄的做法：只存 id——7 天後收藏的項目就會消失。
 
-### Immediate toggle
+### 按了立即儲存
 
-`toggleFavorite(item, on)` validates `kind`, requires `id`, `title` and an `http(s)` url, trims every string to 300 characters, writes or deletes the property under the user lock and returns the full favourites list. The page updates optimistically and reverts with 「儲存失敗，請再試一次」 on failure. Favourites are not part of the task 儲存 draft.
+`toggleFavorite(item, on)` 檢查 `kind`、必須有 `id`、`title` 和 `http(s)` 網址，每個字串最多 300 字，在 user lock 內寫入或刪除屬性，回傳完整的收藏清單。頁面先更新星號，失敗時還原並顯示「儲存失敗，請再試一次」。收藏不放進任務的「儲存」草稿。
 
-### Star placement
+### 星號按鈕的位置
 
-News items and product cards are links, so the star is a separate `<button>` placed beside the link (not inside it) and clicking it never opens the link. The star shows ★ when starred, ☆ otherwise, with `aria-pressed`.
+新聞和商品卡片本身是連結，所以星號是放在連結旁邊（不在連結裡面）的另一個 `<button>`，按星號不會打開連結。已收藏顯示 ★、未收藏顯示 ☆，並設定 `aria-pressed`。
 
-### Favourites tab
+### 我的最愛分頁
 
-Seventh tab 我的最愛 after 台灣活動. Two sections (台灣活動, 商品), each sorted by `starredAt` descending and paginated 25 per page; empty state 「還沒有收藏，按 ☆ 加入」. Items show the snapshot; a 「已下架」 hint appears when the item is no longer in the current list.
+第七個分頁「我的最愛」放在台灣活動之後。分成兩區（台灣活動、商品），各依 `starredAt` 新到舊排列，每頁 25 筆；沒有收藏時顯示「還沒有收藏，按 ☆ 加入」。項目顯示快照內容；目前列表裡已經沒有該項目時標示「已下架」。
 
-## Implementation Contract
+## 實作約定
 
-- Behaviour: starring a news item makes it appear on 我的最愛 immediately and after reload; it stays after the news is removed from the sheet; un-starring anywhere removes it everywhere.
-- Interface: `toggleFavorite(item, on) -> favorites[]`; `getData().favorites` array of snapshots.
-- Failure modes: invalid item → `bad favorite`; more than 500 → `我的最愛已滿`; network failure → star reverts with a toast.
-- Acceptance: node tests for toggle on/off, validation, cap, snapshot kept when the source row is gone, star button outside links, favourites tab rendering and empty state; manual check on the deployed page.
-- Scope: in — news and product favourites, the tab. Out — events/tasks favourites.
+- 行為：收藏一則新聞後，它馬上出現在我的最愛，重新整理也還在；新聞從試算表刪掉後仍然在；在任何地方取消收藏，所有地方都會同步取消。
+- 介面：`toggleFavorite(item, on) -> favorites[]`；`getData().favorites` 是快照陣列。
+- 失敗情況：內容不合法 → `bad favorite`；超過 500 筆 → 「我的最愛已滿」；網路失敗 → 星號還原並提示。
+- 驗收：node 測試收藏／取消、內容檢查、上限、來源資料刪除後快照還在、星號不在連結裡面、我的最愛分頁的畫面和沒有收藏時的提示；在部署後的頁面手動檢查。
+- 範圍：包含新聞和商品的收藏、我的最愛分頁；不包含活動和任務的收藏。
 
-## Risks / Trade-offs
+## 風險與取捨
 
-- [UserProperties quota] → cap at 500 and per-field trimming.
-- [Snapshot goes stale (price changes)] → favourites show the starred snapshot; the link opens the live page.
+- [UserProperties 額度] → 上限 500 筆，每個欄位限制長度。
+- [快照內容過時（例如價格變了）] → 我的最愛顯示收藏當時的快照；連結會打開最新的頁面。

@@ -1,10 +1,10 @@
-## 1. Scraper
+## 1. 爬蟲
 
-- [ ] 1.1 "Drop events without an end time": `build_events` skips events with no `end` (Event filtering requirement). Verify: unittest with a `start=None, end=None` event expecting it absent.
-- [ ] 1.2 "Remove claim-reward rows": skip `Claim Reward!` steps and tasks translated to 領取獎勵, ids of other tasks unchanged (Claim reward rows skipped requirement). Verify: unittest on a step list with Use a Star Piece + Claim Reward!.
-- [ ] 1.3 "Product dedupe key": `product_key` and first-wins dedupe in `fetch_pchome` (Duplicate products removed requirement). Verify: unittest with the two $590 piggy-bank listings and a same-name different-price pair.
+- [ ] 1.1 實作「拿掉沒有結束時間的活動」：`build_events` 略過沒有 `end` 的活動（活動篩選）。驗證：單元測試用 `start=None, end=None` 的活動，確認不會輸出。
+- [ ] 1.2 實作「略過領取獎勵」：略過 `Claim Reward!` 和翻譯後是「領取獎勵」的任務，其他任務 id 不變（略過領取獎勵）。驗證：單元測試用含「Use a Star Piece」和「Claim Reward!」的步驟。
+- [ ] 1.3 實作「商品去重的鍵」：`product_key` 和 `fetch_pchome` 只留第一筆（移除重複商品）。驗證：單元測試用那兩筆 $590 存錢筒，以及一組同名不同價的商品。
 
-## 2. Dashboard
+## 2. 看板
 
-- [ ] 2.1 Page-side safety: `derive()` drops events without `end` and dedupes products with `productKey` (Readable layout scenario "Event without end on the page", Duplicate products removed). Verify: node tests — no 「Infinity」 in any tab, duplicate products shown once. [after: 1.3]
-- [ ] 2.2 "Layout fixes per tab" (Readable layout requirement): remove the first-child width rule, name column min 240 px, scrolling tab bar, stacked task rows and group header on phones, `min-width:0`/`overflow-wrap` on text containers. Verify: node test that Styles.html has no `td:first-child { ... width` rule, plus a screenshot pass of all tabs at 375/768/1280 px with the 2026-10-21 payload. [after: 2.1]
+- [ ] 2.1 頁面再擋一次：`derive()` 篩掉沒有 `end` 的活動，並用 `productKey` 去重商品（排版不擠壓的「頁面上沒有結束時間的活動」情境、移除重複商品）。驗證：node 測試——任何分頁都沒有「Infinity」、重複商品只顯示一筆。[after: 1.3]
+- [ ] 2.2 實作「各分頁的排版修正」（排版不擠壓）：拿掉 first-child 寬度規則、名稱欄至少 240px、分頁列可橫向捲動、手機上任務列和任務組標題改成上下排、文字容器加 `min-width:0`／`overflow-wrap`。驗證：node 測試確認 Styles.html 沒有 `td:first-child { ... width` 規則，並用 2026-10-21 的資料在 375／768／1280px 截圖檢查每個分頁。[after: 2.1]

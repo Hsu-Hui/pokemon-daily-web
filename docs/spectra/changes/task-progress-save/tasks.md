@@ -1,9 +1,9 @@
-## 1. Server
+## 1. 伺服器
 
-- [ ] 1.1 "Batch save on the server": `saveTasks(changes)` with key/value validation and one lock (Batch save requirement). Verify: node tests — valid batch saved, `bad change` on invalid key or value with state unchanged.
+- [ ] 1.1 實作「伺服器一次儲存」：`saveTasks(changes)`，檢查 key 和值，只取一次 lock（一次儲存）。驗證：node 測試——合法的變更都存進去，不合法的 key 或值丟出 `bad change` 且狀態不變。
 
-## 2. Page
+## 2. 頁面
 
-- [ ] 2.1 "Ordered checking within a group" (Ordered task checking requirement): clicking task N updates the draft for 1..N or N..end. Verify: node tests over the example table. [after: 1.1]
-- [ ] 2.2 "Draft and save bar" (Save bar, Optimistic update requirements): sticky bar with count, 儲存 calls `saveTasks`, draft kept on failure and across tabs, `beforeunload` warning, 放棄/復原 still immediate. Verify: node tests for count, success, failure and tab switch; manual check of the sticky bar and leave prompt on the deployed page. [after: 2.1]
-- [ ] 2.3 "Overview task window" (Tabs requirement): `overviewTaskHours: 48` in `shared/board.json`, overview lists unfinished groups ending within 48 h. Verify: node test with a group ending in 40 h (listed) and 50 h (not listed); `test_board_gs_is_generated` passes. [after: 2.2]
+- [ ] 2.1 實作「任務組內依序勾選」（任務依序勾選）：點第 N 項時，草稿更新第 1～N 項或第 N 項到最後。驗證：node 測試涵蓋範例表。[after: 1.1]
+- [ ] 2.2 實作「草稿與儲存列」（儲存列、先更新畫面再儲存）：固定的儲存列顯示數量，「儲存」呼叫 `saveTasks`，失敗和切換分頁時保留草稿，`beforeunload` 提醒，「放棄」「復原」維持立即儲存。驗證：node 測試變更數量、成功、失敗、切換分頁；在部署後的頁面手動檢查儲存列和離開確認。[after: 2.1]
+- [ ] 2.3 實作「總覽的任務時間範圍」（分頁）：`shared/board.json` 加 `overviewTaskHours: 48`，總覽列出 48 小時內結束且沒做完的任務組。驗證：node 測試 40 小時後結束的有列出、50 小時後結束的沒有；`test_board_gs_is_generated` 通過。[after: 2.2]

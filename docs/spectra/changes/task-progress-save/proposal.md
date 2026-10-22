@@ -1,28 +1,28 @@
-## Summary
+## 摘要
 
-Make task checking match how research works in the game and stop saving on every click: checking a task also checks every task above it, changes stay on the page until 儲存 is pressed, and 總覽 lists unfinished tasks whose group ends within two days.
+讓任務勾選符合遊戲裡調查的進行方式，也不再每點一下就存：勾某個任務時，它上面的任務也一起勾；變更先留在頁面上，按「儲存」才送出；總覽列出 2 天內結束、還沒做完的任務。
 
-## Motivation
+## 動機
 
-- Timed research is done step by step; ticking task 20 means tasks 1–19 are done too, but today each box must be ticked by hand.
-- Every tick is saved immediately with one server call; Ryan wants to tick several and save once.
-- 「快結束了，還沒完成」 only lists task groups in their last 4 hours, which is too late to plan.
+- 限時調查是一步一步解的；勾了第 20 項代表第 1～19 項也做完了，但現在每一格都要手動勾。
+- 現在每勾一次就呼叫一次伺服器儲存；Ryan 想勾好幾個再一次儲存。
+- 「快結束了，還沒完成」只列最後 4 小時的任務組，太晚了，來不及安排。
 
-## Proposed Solution
+## 解決方式
 
-- Sequential checking inside one task group: checking task N checks tasks 1..N; unchecking task N unchecks N..end.
-- A sticky bar at the top of the page with 「儲存」 and 「有 N 項變更未儲存」. Task checks are a local draft until saved; the draft survives tab switches; leaving or reloading the page with unsaved changes asks for confirmation; a failed save keeps the draft and shows an error.
-- `saveTasks(changes)` in Apps Script writes all changes in one call.
-- 總覽 「快結束了，還沒完成」 lists task groups that are not finished, not given up, and end within 48 hours (`overviewTaskHours` in `shared/board.json`). Discord reminders keep the 4-hour window.
+- 同一個任務組裡依序勾選：勾第 N 項時第 1～N 項都打勾；取消第 N 項時第 N 項到最後都取消。
+- 頁面最上面加固定的儲存列，顯示「儲存」和「有 N 項變更未儲存」。任務勾選先存在頁面的草稿，按儲存才送出；切換分頁草稿還在；有未儲存變更時離開或重新整理會先確認；儲存失敗保留草稿並提示。
+- Apps Script 新增 `saveTasks(changes)`，一次寫入所有變更。
+- 總覽「快結束了，還沒完成」列出沒做完、沒放棄、48 小時內結束的任務組（`shared/board.json` 的 `overviewTaskHours`）。Discord 提醒維持 4 小時。
 
-## Non-Goals (optional)
+## 不做的事
 
-See design.md.
+見 design.md。
 
-## Impact
+## 影響
 
-- Affected specs: dashboard, user-progress
-- Affected code:
-  - Modified: gas/App.html, gas/Styles.html, gas/Code.gs, shared/board.json, gas/Board.gs, tests/gas/app.test.js, tests/gas/merge.test.js, tests/gas/app.js, README.md
-  - New: none
-  - Removed: none
+- 影響的規格：dashboard、user-progress
+- 影響的程式：
+  - 修改：gas/App.html、gas/Styles.html、gas/Code.gs、shared/board.json、gas/Board.gs、tests/gas/app.test.js、tests/gas/merge.test.js、tests/gas/app.js、README.md
+  - 新增：無
+  - 刪除：無
