@@ -47,6 +47,7 @@ const BOARD = {
     }
   ],
   "remindHours": 4,
+  "earlyRemindHours": 48,
   "overviewTaskHours": 48,
   "keepNewsDays": 7,
   "keepProductDays": 7,

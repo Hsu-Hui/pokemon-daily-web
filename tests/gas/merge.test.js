@@ -141,3 +141,16 @@ test('favorites are per user and survive the news row being deleted', () => {
   a.gas.user = 'someone-else';
   assert.strictEqual(a.gas.getData().favorites.length, 0);
 });
+
+test('remindTasks: one early reminder within 2 days, then hourly in the last 4 hours', () => {
+  const HOUR = 36e5;
+  const { gas, sheets, fetched } = load({ scriptProps: { DISCORD_WEBHOOK_URL: 'https://hook' } });
+  const group = (id, ms) => ({ id, name: id, end: new Date(Date.now() + ms).toISOString(), tasks: [{ id: 't', text: '捕捉 1 隻寶可夢' }] });
+  sheets.tasks = [group('soon', 3 * HOUR), group('twoDays', 40 * HOUR), group('far', 60 * HOUR)];
+  gas.remindTasks();
+  gas.remindTasks();
+  const names = fetched.map((f) => f.body.content.split('\n')[0]);
+  assert.deepStrictEqual(names.filter((n) => n.includes('twoDays')).length, 1);
+  assert.deepStrictEqual(names.filter((n) => n.includes('soon')).length, 2);
+  assert.ok(!names.some((n) => n.includes('far')));
+});

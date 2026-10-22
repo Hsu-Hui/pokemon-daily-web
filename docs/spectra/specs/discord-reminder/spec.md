@@ -2,7 +2,7 @@
 
 ## Purpose
 
-任務快結束還沒完成時，每小時透過 Discord webhook 提醒。對應 `gas/Code.gs` 的 `remindTasks`。
+任務快結束還沒完成時，透過 Discord webhook 提醒：結束前 2 天提醒一次，最後 4 小時每小時提醒。對應 `gas/Code.gs` 的 `remindTasks`。
 
 ## Requirements
 
@@ -18,7 +18,12 @@
 ---
 ### Requirement: 提醒時間範圍
 
-任務組 SHALL 在有結束時間、未被放棄、剩餘時間大於 0 且不超過 4 小時（`REMIND_HOURS`）、且至少有一項未勾選時發送提醒；每組一則訊息。
+任務組 SHALL 在有結束時間、未被放棄、剩餘時間大於 0、且至少有一項未勾選時才可能提醒；每組一則訊息。剩餘時間不超過 `earlyRemindHours`（48 小時）但大於 `remindHours`（4 小時）時，每個任務組 SHALL 只提醒一次（記在觸發器擁有者 UserProperties 的 `earlyReminded`）；剩餘時間不超過 `remindHours` 時 SHALL 每小時提醒。兩個時數設定在 `shared/board.json`。
+
+#### Scenario: 任務組剩 40 小時
+
+- **WHEN** 某任務組剩 40 小時、還有未完成項目，觸發器連續執行兩次
+- **THEN** 系統 SHALL 只在第一次發送提醒
 
 #### Scenario: 任務組剩 3 小時
 

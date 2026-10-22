@@ -3,7 +3,7 @@
  *
  * - doPost：GitHub Actions 每天凌晨把爬到的資料送進來，存到這個試算表；有來源抓取失敗時發 Discord。
  * - doGet：看板網頁。
- * - remindTasks：每小時檢查，任務快結束還沒完成就發 Discord。
+ * - remindTasks：每小時檢查，任務結束前 2 天提醒一次，最後 4 小時每小時提醒。
  *
  * 勾選、放棄的紀錄存在每個人自己的 UserProperties，互不影響。
  * 保留天數、提醒時間等設定在 shared/board.json（這裡用產生的 Board.gs 裡的 BOARD）。
@@ -298,12 +298,19 @@ function remindTasks() {
   const viewUrl = PropertiesService.getScriptProperties().getProperty('VIEW_URL');
   const state = loadState_();
   const now = new Date();
-  readRows_('tasks').forEach((g) => {
+  // 結束前 earlyRemindHours 小時先提醒一次（記在 earlyReminded），最後 remindHours 小時每小時提醒
+  const props = PropertiesService.getUserProperties();
+  const early = JSON.parse(props.getProperty('earlyReminded') || '{}');
+  const groups = readRows_('tasks');
+  groups.forEach((g) => {
     if (!g.end || state.gaveUp[g.id]) return;
     const left = new Date(g.end) - now;
-    if (left <= 0 || left > BOARD.remindHours * 3600 * 1000) return;
+    if (left <= 0 || left > BOARD.earlyRemindHours * 3600 * 1000) return;
+    const hourly = left <= BOARD.remindHours * 3600 * 1000;
+    if (!hourly && early[g.id]) return;
     const todo = g.tasks.filter((t, i) => !state.taskDone[g.id + '#' + (t.id || i)]);
     if (!todo.length) return;
+    if (!hourly) early[g.id] = true;
     const h = Math.floor(left / 3600000);
     const m = Math.floor((left % 3600000) / 60000);
     const lines = [
@@ -318,6 +325,10 @@ function remindTasks() {
       payload: JSON.stringify({ content: lines.join('\n').slice(0, 1900) }),
     });
   });
+  // 只留還存在的任務組，避免紀錄越積越多
+  const ids = {};
+  groups.forEach((g) => { if (early[g.id]) ids[g.id] = true; });
+  props.setProperty('earlyReminded', JSON.stringify(ids));
 }
 
 // ---------- 第一次設定 ----------

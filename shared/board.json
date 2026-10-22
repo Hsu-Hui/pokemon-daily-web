@@ -8,6 +8,7 @@
     {"name": "其他", "keywords": []}
   ],
   "remindHours": 4,
+  "earlyRemindHours": 48,
   "overviewTaskHours": 48,
   "keepNewsDays": 7,
   "keepProductDays": 7,
