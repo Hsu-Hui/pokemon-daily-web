@@ -93,3 +93,29 @@ test('ended events go to archive without restore', () => {
   assert.match(main.innerHTML, /已結束的活動/);
   assert.ok(!main.innerHTML.includes('>復原</button>'));
 });
+
+test('events without end are hidden and no tab shows Infinity', () => {
+  const data = sampleData();
+  data.events.push({ id: 'noend', name: '極巨星期一：極巨化狃拉', type: '極巨星期一', category: '極巨化/超極巨化', url: 'u', start: null, end: null, firstSeen: null });
+  const { app, main } = loadApp(data);
+  for (const tab of ['overview', 'go', 'tasks', 'shop', 'tw', 'archive']) {
+    app.ui.tab = tab; app.render();
+    assert.ok(!main.innerHTML.includes('Infinity'), tab);
+    assert.ok(!main.innerHTML.includes('極巨化狃拉'), tab);
+  }
+});
+
+test('duplicate products (same name and price) are shown once', () => {
+  const data = sampleData();
+  const dup = (id, name, price) => ({ id, source: 'PChome', name, url: 'u', price, image: '', firstSeen: new Date().toISOString(), media: '' });
+  data.products = [dup('a', '皮卡丘 卡比獸 造型存錢筒', '$590'), dup('b', '皮卡丘  卡比獸 造型存錢筒', '$590'), dup('c', '皮卡丘 卡比獸 造型存錢筒', '$650')];
+  const { app, main } = loadApp(data);
+  app.ui.tab = 'shop'; app.render();
+  assert.strictEqual((main.innerHTML.match(/造型存錢筒/g) || []).length, 2);
+});
+
+test('event name column is not limited by the old checkbox width rule', () => {
+  const css = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'gas', 'Styles.html'), 'utf8');
+  assert.ok(!/td:first-child\s*\{[^}]*width/.test(css));
+  assert.match(css, /\.col-name\s*\{[^}]*min-width:\s*240px/);
+});

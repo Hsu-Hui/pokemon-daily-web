@@ -12,7 +12,7 @@
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'Noto Sans TC', system-ui, sans-serif; font-size: 15px; line-height: 1.55; }
+body { overflow-wrap: break-word; margin: 0; background: var(--bg); color: var(--ink); font-family: 'Noto Sans TC', system-ui, sans-serif; font-size: 15px; line-height: 1.55; }
 a { color: var(--blue); }
 button { font: inherit; cursor: pointer; }
 input[type=checkbox] { width: 22px; height: 22px; accent-color: #CC2E0B; margin: 0; cursor: pointer; flex: none; }
@@ -22,8 +22,10 @@ header { background: var(--surface); border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 12px; padding-top: 18px; }
 .brand h1 { margin: 0; font-size: 22px; font-weight: 900; letter-spacing: .02em; }
 .brand small { display: block; font-size: 13px; color: var(--muted); }
-nav { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 14px; }
-nav button { min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px 12px 0 0; font-weight: 700; background: transparent; color: var(--muted); }
+/* 分頁列：單行，窄螢幕可以左右滑 */
+nav { display: flex; gap: 4px; margin-top: 14px; overflow-x: auto; scrollbar-width: none; }
+nav::-webkit-scrollbar { display: none; }
+nav button { flex: none; white-space: nowrap; min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px 12px 0 0; font-weight: 700; background: transparent; color: var(--muted); }
 nav button[aria-selected=true] { background: var(--bg); color: var(--ink); box-shadow: inset 0 -3px 0 var(--red); }
 main.wrap { padding: 24px 16px 48px; display: flex; flex-direction: column; gap: 16px; }
 
@@ -51,7 +53,9 @@ h3 { margin: 0; font-size: 17px; font-weight: 700; }
 table { width: 100%; border-collapse: collapse; min-width: 720px; }
 th { text-align: left; font-size: 13px; color: var(--muted); font-weight: 500; padding: 12px 8px; }
 td { padding: 12px 8px; border-top: 1px solid var(--line); vertical-align: middle; }
-th:first-child, td:first-child { padding-left: 16px; width: 56px; }
+th:first-child, td:first-child { padding-left: 16px; }
+.col-name { min-width: 240px; }
+.col-left { width: 160px; padding-right: 16px; }
 .scroll { overflow-x: auto; }
 .when { font-size: 14px; white-space: nowrap; }
 .th-sort { border: 0; background: transparent; padding: 0; color: inherit; font: inherit; font-weight: 700; display: inline-flex; gap: 4px; align-items: center; min-height: 32px; }
@@ -71,7 +75,15 @@ select { font: inherit; font-size: 14px; min-height: 40px; padding: 0 12px; bord
 }
 
 .task { display: flex; gap: 12px; align-items: center; padding: 6px 0; min-height: 32px; }
-.task .reward { margin-left: auto; text-align: right; font-size: 13px; color: var(--muted); }
+.task .body { flex: 1 1 auto; min-width: 0; display: flex; gap: 12px; align-items: center; }
+.task .text { flex: 1 1 auto; min-width: 0; }
+.task .reward { flex: 0 1 45%; margin-left: auto; text-align: right; font-size: 13px; color: var(--muted); }
+/* 手機：獎勵放到任務下一行，任務組標題獨占一行 */
+@media (max-width: 600px) {
+  .task .body { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .task .reward { flex-basis: auto; margin-left: 0; text-align: left; }
+  .group-head > .grow { flex-basis: 100%; }
+}
 .task.checked .text { text-decoration: line-through; color: var(--muted); }
 .ghost { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--line); background: transparent; color: var(--muted); font-size: 13px; font-weight: 700; }
 .outline { min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1.5px solid var(--ink); background: transparent; color: var(--ink); font-weight: 700; }

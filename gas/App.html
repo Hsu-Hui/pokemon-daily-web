@@ -48,11 +48,12 @@ function setFlag(kind, id, value) {
 
 function derive() {
   const now = Date.now(), s = data.state;
-  const events = data.events.map((e) => {
-    const end = e.end ? new Date(e.end).getTime() : null;
+  // 沒有結束時間的活動是 ScrapedDuck 清掉時間的舊活動，不顯示（否則剩餘時間會變成 Infinity）
+  const events = data.events.filter((e) => e.end).map((e) => {
+    const end = new Date(e.end).getTime();
     const start = e.start ? new Date(e.start).getTime() : null;
-    const left = end ? end - now : Infinity;
-    const span = end && start ? end - start : 0;
+    const left = end - now;
+    const span = start ? end - start : 0;
     return Object.assign({}, e, {
       ended: left <= 0, left,
       notStarted: start && start > now,
@@ -73,7 +74,9 @@ function derive() {
       soon: left > 0 && left < REMIND_MS && n < items.length,
     });
   }).sort((a, b) => a.left - b.left);
-  const products = data.products;
+  // 同一件商品可能有好幾個 PChome 編號：名稱＋價格相同只顯示第一筆
+  const seenProducts = {};
+  const products = data.products.filter((p) => !seenProducts[productKey(p)] && (seenProducts[productKey(p)] = true));
   const twNews = data.news.filter((n) => n.kind === 'event').sort((a, b) => (b.published || b.firstSeen || '').localeCompare(a.published || a.firstSeen || ''));
   return {
     activeEvents: events.filter((e) => !e.ended),
@@ -142,6 +145,8 @@ function sortButton(key, label) {
   return `<button type="button" class="th-sort" data-sort="${key}" aria-pressed="${on}">${label} <span aria-hidden="true">${arrow}</span></button>`;
 }
 
+const productKey = (p) => String(p.name || '').split(/\s+/).filter(Boolean).join(' ').toLowerCase() + '|' + (p.price || '');
+
 // 商品名稱搜尋：不分大小寫，忽略前後空白；空字串代表不篩選
 const matchesQuery = (name, query) => String(name || '').toLowerCase().includes(String(query || '').trim().toLowerCase());
 
@@ -170,11 +175,11 @@ function renderTabs() {
 function eventRows(list) {
   return list.map((e) => `
     <tr>
-      <td><a class="link" href="${esc(e.url)}" target="_blank" rel="noopener"><b>${esc(e.name)}</b></a></td>
+      <td class="col-name"><a class="link" href="${esc(e.url)}" target="_blank" rel="noopener"><b>${esc(e.name)}</b></a></td>
       <td>${tagHtml(catOf(e))}${e.type && e.type !== catOf(e) ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(e.type)}</div>` : ''}</td>
       <td class="when">${when(e.start)}</td>
       <td class="when">${when(e.end)}</td>
-      <td style="width:180px;padding-right:16px">
+      <td class="col-left">
         <div class="stack" style="gap:4px">
           <span class="${e.soon ? 'soon' : 'muted'}" style="font-size:13px;font-weight:700">${e.notStarted ? '未開始' : leftText(e.left)}</span>
           <div class="bar ${e.soon ? 'soon' : ''}"><div style="width:${e.pct}%"></div></div>
@@ -197,7 +202,7 @@ function taskGroupHtml(g) {
   const pct = Math.round(g.n / g.items.length * 100);
   return `
     <div class="card pad stack" style="gap:10px">
-      <div class="row">
+      <div class="row group-head">
         <div class="grow stack" style="gap:0">
           <a class="link" href="${esc(g.url)}" target="_blank" rel="noopener"><b style="font-size:16px">${esc(g.name)}</b></a>
           <span class="muted" style="font-size:13px">${when(g.start)} 開始 → ${when(g.end)} 結束${g.end ? ` · <b class="${g.soon ? 'soon' : ''}">剩 ${leftText(g.left)}</b>` : ''}</span>
@@ -209,8 +214,10 @@ function taskGroupHtml(g) {
       ${g.items.map((t) => `
         <label class="task ${t.done ? 'checked' : ''}">
           <input type="checkbox" data-flag="taskDone" data-id="${esc(t.key)}" ${t.done ? 'checked' : ''}>
-          <span class="text">${esc(t.text)}</span>
-          <span class="reward">${t.reward ? esc(t.reward) : `<a href="${esc(g.url)}" target="_blank" rel="noopener">見原文</a>`}</span>
+          <span class="body">
+            <span class="text">${esc(t.text)}</span>
+            <span class="reward">${t.reward ? esc(t.reward) : `<a href="${esc(g.url)}" target="_blank" rel="noopener">見原文</a>`}</span>
+          </span>
         </label>`).join('')}
     </div>`;
 }
@@ -275,7 +282,7 @@ function renderGo(d) {
     <div class="toolbar only-narrow"><span class="muted">排序</span>${sortButton('type', '類型')}${sortButton('start', '開始')}${sortButton('end', '結束')}</div>
     ${items.length ? `
       <div class="card scroll only-wide"><table>
-        <thead><tr><th>活動</th><th>${sortButton('type', '類型')}</th><th>${sortButton('start', '開始')}</th><th>${sortButton('end', '結束')}</th><th>剩餘</th></tr></thead>
+        <thead><tr><th class="col-name">活動</th><th>${sortButton('type', '類型')}</th><th>${sortButton('start', '開始')}</th><th>${sortButton('end', '結束')}</th><th class="col-left">剩餘</th></tr></thead>
         <tbody>${eventRows(items)}</tbody></table></div>
       <div class="only-narrow stack" style="gap:10px">${eventCards(items)}</div>
       ${pager}` : '<p class="muted">沒有符合的活動</p>'}`;

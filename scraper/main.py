@@ -38,7 +38,8 @@ def build_events(events: list[sources.GoEvent], now: datetime) -> list[dict]:
     for ev in events:
         if ev.type in config.GO_SKIP_TYPES:
             continue
-        if (ev.end and ev.end < now) or (ev.start and ev.start > horizon):
+        # 沒有結束時間的多半是 ScrapedDuck 清掉時間的舊活動，不列
+        if not ev.end or ev.end < now or (ev.start and ev.start > horizon):
             continue
         name_zh = translate.event_name(ev.name)
         out.append({
@@ -53,6 +54,9 @@ def build_events(events: list[sources.GoEvent], now: datetime) -> list[dict]:
     return out
 
 
+CLAIM_REWARD = "領取獎勵"  # 調查步驟最後的領獎，不是任務
+
+
 def build_tasks(groups: list[sources.TaskGroup]) -> list[dict]:
     return [{
         "id": g.id,
@@ -60,7 +64,7 @@ def build_tasks(groups: list[sources.TaskGroup]) -> list[dict]:
         "url": g.url,
         "start": iso(g.start),
         "end": iso(g.end),
-        "tasks": [{"id": i, "text": t, "reward": r} for i, t, r in g.tasks],
+        "tasks": [{"id": i, "text": t, "reward": r} for i, t, r in g.tasks if t != CLAIM_REWARD],
     } for g in groups]
 
 
@@ -103,7 +107,8 @@ def _step_task_ids(steps: list[tuple[str, str, list[str]]]) -> list[str]:
 
 
 def build_event_research(found: list[tuple[sources.GoEvent, list[tuple[str, str, list[str]]]]]) -> list[dict]:
-    """LeekDuck 活動頁的限時調查：每個活動一組，期間跟著活動。"""
+    """LeekDuck 活動頁的限時調查：每個活動一組，期間跟著活動。「Claim Reward!」不是任務，不列。"""
+    found = [(ev, [s for s in steps if translate.research_task(s[1]) != CLAIM_REWARD]) for ev, steps in found]
     return [{
         "id": f"ld-{ev.id}",
         "name": f"限時調查：{translate.event_name(ev.name)}",
