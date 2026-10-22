@@ -42,7 +42,7 @@ function loadApp(data, opts = {}) {
       querySelector: (sel) => (sel === 'input[data-shopquery]' ? searchBox : null),
     },
     window: { scrollTo() {}, addEventListener(type, fn) { listeners['window:' + type] = fn; } },
-    localStorage: { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } },
+    localStorage: opts.storage || { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } },
     google: { script: { run: runner } },
   };
   vm.createContext(context);
