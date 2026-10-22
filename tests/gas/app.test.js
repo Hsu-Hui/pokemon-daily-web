@@ -119,3 +119,71 @@ test('event name column is not limited by the old checkbox width rule', () => {
   assert.ok(!/td:first-child\s*\{[^}]*width/.test(css));
   assert.match(css, /\.col-name\s*\{[^}]*min-width:\s*240px/);
 });
+
+function researchData() {
+  const data = sampleData();
+  const end = new Date(Date.now() + 30 * 36e5).toISOString();
+  const tasks = (n) => Array.from({ length: n }, (_, i) => ({ id: 't' + (i + 1), text: '任務 ' + (i + 1), reward: '' }));
+  data.tasks = [
+    { id: 'ld-adidas', name: '限時調查：adidas', url: 'u', start: null, end, firstSeen: null, tasks: tasks(25) },
+    { id: 'field-202610', name: '10 月田野調查', url: 'u', start: null, end, firstSeen: null, tasks: tasks(10) },
+  ];
+  return data;
+}
+const doneOf = (data, groupId, app) => data.tasks.find((g) => g.id === groupId).tasks
+  .map((t, i) => i + 1).filter((n) => (`${groupId}#t${n}` in app.ui.draft ? app.ui.draft[`${groupId}#t${n}`] : !!data.state.taskDone[`${groupId}#t${n}`]));
+
+test('timed research checks in order (example table)', () => {
+  const data = researchData();
+  const { app } = loadApp(data);
+  app.toggleTask('ld-adidas', 4, true);
+  assert.deepStrictEqual(doneOf(data, 'ld-adidas', app), [1, 2, 3, 4, 5]);
+  app.toggleTask('ld-adidas', 19, true);
+  assert.deepStrictEqual(doneOf(data, 'ld-adidas', app), Array.from({ length: 20 }, (_, i) => i + 1));
+  app.toggleTask('ld-adidas', 4, false);
+  assert.deepStrictEqual(doneOf(data, 'ld-adidas', app), [1, 2, 3, 4]);
+});
+
+test('field research ticks one task only', () => {
+  const data = researchData();
+  const { app } = loadApp(data);
+  app.toggleTask('field-202610', 4, true);
+  assert.deepStrictEqual(doneOf(data, 'field-202610', app), [5]);
+});
+
+test('ticks stay as a draft until saved, then saved in one call', () => {
+  const data = researchData();
+  const { app, savebar, listeners, calls } = loadApp(data);
+  app.ui.tab = 'tasks';
+  app.toggleTask('ld-adidas', 2, true);
+  assert.strictEqual(calls.saveTasks.length, 0);
+  assert.match(savebar.innerHTML, /有 3 項變更未儲存/);
+  app.ui.tab = 'shop'; app.render();
+  assert.strictEqual(app.draftCount(), 3, 'tab switch keeps the draft');
+  const ev = { preventDefault() { this.prevented = true; } };
+  listeners['window:beforeunload'](ev);
+  assert.ok(ev.prevented, 'leaving with unsaved changes asks first');
+  listeners.click({ target: { closest: () => ({ disabled: false, dataset: { save: '' } }) } });
+  assert.strictEqual(calls.saveTasks.length, 1);
+  assert.deepStrictEqual(Object.keys(calls.saveTasks[0]).sort(), ['ld-adidas#t1', 'ld-adidas#t2', 'ld-adidas#t3']);
+  assert.strictEqual(app.draftCount(), 0);
+  assert.match(savebar.innerHTML, /已儲存/);
+});
+
+test('failed save keeps the draft', () => {
+  const data = researchData();
+  const { app, listeners, elements } = loadApp(data, { saveFails: true });
+  app.toggleTask('ld-adidas', 1, true);
+  listeners.click({ target: { closest: () => ({ disabled: false, dataset: { save: '' } }) } });
+  assert.strictEqual(app.draftCount(), 2);
+  assert.strictEqual(elements.toast.textContent, '儲存失敗，請再試一次');
+});
+
+test('overview lists unfinished task groups ending within 48 hours', () => {
+  const data = researchData();
+  data.tasks[1].end = new Date(Date.now() + 50 * 36e5).toISOString();
+  const { app, main } = loadApp(data);
+  app.ui.tab = 'overview'; app.render();
+  assert.match(main.innerHTML, /限時調查：adidas/);
+  assert.ok(!main.innerHTML.includes('10 月田野調查'));
+});

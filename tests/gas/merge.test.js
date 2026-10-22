@@ -87,3 +87,19 @@ test('setFlag only accepts taskDone and gaveUp', () => {
   assert.throws(() => gas.setFlag('done', 'e1', true), /bad kind/);
   assert.deepStrictEqual(Object.keys(gas.setFlag('gaveUp', 'g1', true)).sort(), ['gaveUp', 'taskDone']);
 });
+
+test('saveTasks writes all changes at once', () => {
+  const { gas } = load();
+  gas.saveTasks({ 'g1#a': true, 'g1#b': true });
+  const state = gas.saveTasks({ 'g1#a': false, 'g2#c': true });
+  assert.deepStrictEqual(Object.keys(state.taskDone).sort(), ['g1#b', 'g2#c']);
+  assert.deepStrictEqual(Object.keys(gas.loadState_().taskDone).sort(), ['g1#b', 'g2#c']);
+});
+
+test('saveTasks rejects bad keys or values without writing', () => {
+  const { gas } = load();
+  gas.saveTasks({ 'g1#a': true });
+  assert.throws(() => gas.saveTasks({ 'g1#t1': 'yes' }), /bad change/);
+  assert.throws(() => gas.saveTasks({ 'no-hash': true, 'g1#b': true }), /bad change/);
+  assert.deepStrictEqual(Object.keys(gas.loadState_().taskDone), ['g1#a']);
+});

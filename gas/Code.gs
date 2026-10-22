@@ -222,6 +222,26 @@ function setFlag(kind, id, value) {
   }
 }
 
+/** 網頁按「儲存」：一次寫入多個任務勾選，changes 是 { "任務組id#任務id": true/false }。 */
+function saveTasks(changes) {
+  const keys = Object.keys(changes || {});
+  const ok = keys.every((k) => /^[^#]+#[^#]+$/.test(k) && typeof changes[k] === 'boolean');
+  if (!ok) throw new Error('bad change');
+  const lock = LockService.getUserLock();
+  lock.waitLock(10000);
+  try {
+    const state = loadState_();
+    keys.forEach((k) => {
+      if (changes[k]) state.taskDone[k] = true;
+      else delete state.taskDone[k];
+    });
+    PropertiesService.getUserProperties().setProperty('state', JSON.stringify(state));
+    return state;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // ---------- Discord 任務提醒 ----------
 
 function remindTasks() {
