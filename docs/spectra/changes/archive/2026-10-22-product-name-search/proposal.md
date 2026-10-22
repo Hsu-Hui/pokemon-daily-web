@@ -1,26 +1,26 @@
-## Summary
+## 摘要
 
-Add a search box to the 新商品 tab that filters products by name.
+在新商品頁加一個搜尋框，可以用商品名稱篩選。
 
-## Motivation
+## 動機
 
-The tab can hold dozens of products from PChome, 寶可夢中心 and 官網; finding a specific item (for example 皮卡丘 plush) means paging through the list.
+這一頁會有幾十件來自 PChome、寶可夢中心和官網的商品；要找某一件（例如皮卡丘玩偶）得一頁一頁翻。
 
-## Proposed Solution
+## 解決方式
 
-- A search input above the product grid. Typing filters to products whose name contains the text (case-insensitive, leading/trailing spaces ignored), together with the source filter and the chosen sort; pagination counts only matching products and jumps back to page 1 on every change.
-- The input keeps focus and caret position while the list re-renders; clearing it shows all products again.
-- An empty result shows 「找不到符合「…」的商品」.
+- 商品列表上方加搜尋框。輸入後只顯示名稱含該文字的商品（不分大小寫、忽略前後空白），並與來源篩選、排序一起作用；分頁只計算符合的商品，每次輸入都回到第 1 頁。
+- 列表重畫時搜尋框保持焦點和游標位置；清空就顯示全部商品。
+- 沒有結果時顯示「找不到符合「…」的商品」。
 
-## Non-Goals (optional)
+## 不做的事
 
-- No search on other tabs, no fuzzy matching, no server-side search.
-- The search text is not remembered across page loads.
+- 其他分頁不加搜尋，不做模糊比對，也不做伺服器端搜尋。
+- 重新載入頁面後不保留搜尋文字。
 
-## Impact
+## 影響
 
-- Affected specs: dashboard
-- Affected code:
-  - Modified: gas/App.html, gas/Styles.html
-  - New: none
-  - Removed: none
+- 影響的規格：dashboard
+- 影響的程式：
+  - 修改：gas/App.html、gas/Styles.html
+  - 新增：無
+  - 刪除：無

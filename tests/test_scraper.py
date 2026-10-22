@@ -199,6 +199,14 @@ class EventTests(unittest.TestCase):
         self.assertEqual(out[0]["name"], "聚焦時刻：皮卡丘")
         self.assertEqual(out[0]["type"], "聚焦時刻")
 
+    def test_event_without_end_is_dropped(self):
+        n = NOW
+        out = main.build_events([
+            self.ev("noend", None, None, "max-mondays", "Dynamax Sneasel during Max Monday"),
+            self.ev("ok", n - timedelta(days=1), n + timedelta(days=1)),
+        ], n)
+        self.assertEqual([e["id"] for e in out], ["ok"])
+
     def test_translate_still_works(self):
         self.assertEqual(translate.event_name("Charmander Community Day"), "小火龍社群日")
         self.assertEqual(translate.event_name("Pokémon GO Wild Area 2026: Sendai • Tohoku"), "Pokémon GO 野外區域 2026: 仙台・東北")
@@ -274,6 +282,16 @@ class EventResearchTests(unittest.TestCase):
         self.assertEqual((g["tasks"][0]["text"], g["tasks"][0]["reward"]), ("使用 1 個星星碎片", "星星沙 ×7740"))
         self.assertEqual(translate.research_task("Claim Reward!"), "領取獎勵")
 
+    def test_claim_reward_is_skipped(self):
+        ev = self.ev("minior", NOW - timedelta(days=1), NOW + timedelta(days=3))
+        steps = [("s", "Use a Star Piece", ["Stardust ×7740"]), ("s", "Claim Reward!", ["Star Piece ×1"])]
+        [g] = main.build_event_research([(ev, steps)])
+        [full] = main.build_event_research([(ev, steps[:1])])
+        self.assertEqual([t["text"] for t in g["tasks"]], ["使用 1 個星星碎片"])
+        self.assertEqual(g["tasks"][0]["id"], full["tasks"][0]["id"])
+        bh = sources.TaskGroup("bh-1", "巴哈", "u", NOW, NOW + timedelta(days=1), [("a", "捕捉 5 隻", ""), ("b", "領取獎勵", "")])
+        self.assertEqual([t["text"] for t in main.build_tasks([bh])[0]["tasks"]], ["捕捉 5 隻"])
+
     def test_group_order(self):
         bh = sources.TaskGroup("bh-1", "巴哈", "u", NOW, NOW + timedelta(days=1), [("i", "t", "r")])
         ev = self.ev("adidas", NOW - timedelta(days=1), NOW + timedelta(days=30))
@@ -336,6 +354,21 @@ class BoardTests(unittest.TestCase):
         spec.loader.exec_module(build)
         self.assertEqual((ROOT / "gas" / "Board.gs").read_text(encoding="utf-8"), build.render(),
                          "shared/board.json 改過了，請執行 python scripts/build_gas_config.py")
+
+
+
+class PChomeTests(unittest.TestCase):
+    def test_duplicate_products_kept_once(self):
+        prods = [
+            {"Id": "DECU5W-A900FSAGQ", "name": "皮卡丘 卡比獸 百變怪 精靈球 造型存錢筒", "price": 590},
+            {"Id": "DEAS4E-A900FSAIT", "name": "皮卡丘  卡比獸 百變怪 精靈球 造型存錢筒", "price": 590},
+            {"Id": "X1", "name": "皮卡丘 玩偶", "price": 500},
+            {"Id": "X2", "name": "皮卡丘 玩偶", "price": 650},
+        ]
+        resp = type("R", (), {"json": lambda self: {"totalPage": 1, "prods": prods}})()
+        with unittest.mock.patch.object(sources.pchome, "_get", return_value=resp):
+            items = sources.fetch_pchome()
+        self.assertEqual([p.id for p in items], ["pchome:DECU5W-A900FSAGQ", "pchome:X1", "pchome:X2"])
 
 
 if __name__ == "__main__":

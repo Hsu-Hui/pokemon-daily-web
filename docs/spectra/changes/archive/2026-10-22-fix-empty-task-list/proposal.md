@@ -1,38 +1,38 @@
-## Problem
+## 問題
 
-The 任務待辦 page only ever shows the monthly field research group. The daily run on 2026-10-21 (Actions run 39625663387) sent 1 task group (10 月田野調查) and Apps Script stored it (`tasks: 1`); no event timed research ever appears.
+任務待辦頁一直只有每月的田野調查任務組。2026-10-21 的每日執行（Actions run 39625663387）只送出 1 個任務組（10 月田野調查），Apps Script 也存進去了（`tasks: 1`）；活動的限時調查從來沒出現過。
 
-## Root Cause
+## 根本原因
 
-- The Bahamut source only reads 【情報】 posts whose title contains 調查/任務/課題. On 2026-10-21 the board's first page had 15 【情報】 posts; only the pinned collection thread matched, and it has no parsable period, so it was dropped.
-- The other 【情報】 posts are Niantic announcements. Their bodies describe events ("田野調查課題即將登場") but do not list the actual tasks, so even with a looser title filter they produce only false "tasks" (descriptive sentences that contain numbers).
-- Bahamut periods written with the year ("2026年11月9日10:00～2026年11月13日20:00") are mis-parsed: the end is taken as the start day at 23:59.
-- Bahamut tasks have no id, so check marks are keyed by position and move to another task when the post is edited.
+- 巴哈來源只讀標題含「調查／任務／課題」的【情報】文。2026-10-21 看板第一頁有 15 篇【情報】，只有置頂的整理串符合，而它沒有可解析的期間，所以被丟掉。
+- 其他【情報】文是官方公告。內文會介紹活動（例如「田野調查課題即將登場」），但沒有列出實際任務，所以就算放寬標題條件，也只會抓到含數字的說明句子，變成假任務。
+- 寫了年份的巴哈期間（「2026年11月9日10:00～2026年11月13日20:00」）會解析錯：結束時間被當成開始那天的 23:59。
+- 巴哈任務沒有 id，勾選紀錄靠項目順序對應，文章被編輯後會對到別的任務。
 
-LeekDuck event pages (already linked from ScrapedDuck events) contain the real Timed/Special Research steps in structured markup (`.special-research-list .step-item .task-reward` with `.task-text` and `.reward-label`), e.g. "adidas Timed Research (1/3): Spin 10 PokéStops or Gyms → Razz Berry ×5".
+LeekDuck 的活動頁（ScrapedDuck 的活動已經有連結）用固定結構列出真正的限時／特別調查步驟（`.special-research-list .step-item .task-reward`，裡面有 `.task-text` 和 `.reward-label`），例如「adidas Timed Research (1/3)：Spin 10 PokéStops or Gyms → Razz Berry ×5」。
 
-## Proposed Solution
+## 解決方式
 
-- New source: for ScrapedDuck events that are active now (excluding skipped types), fetch the LeekDuck event page and turn its timed/special research steps into a task group `ld-<eventID>` named `限時調查：<中文活動名>`, with the event's start/end. Tasks and rewards are translated with the existing dictionary plus a small item table.
-- Bahamut: parse full dates with year, and ignore sentence lines ending in 。 or ！ as tasks.
-- Give every Bahamut and LeekDuck task a stable `id` (hash of its text) so check marks follow the task.
+- 新來源：對 ScrapedDuck 裡目前進行中的活動（排除略過的類型）讀 LeekDuck 活動頁，把限時／特別調查步驟整理成任務組 `ld-<活動id>`，名稱 `限時調查：<中文活動名>`，期間沿用活動。任務和獎勵用現有字典加上一張道具對照表翻譯。
+- 巴哈：支援含年份的完整日期；以「。」或「！」結尾的句子不當任務。
+- 巴哈和 LeekDuck 的每個任務都有固定 `id`（任務文字的雜湊），勾選紀錄會跟著任務走。
 
-## Non-Goals (optional)
+## 不做的事
 
-- No AI translation and no new sites beyond LeekDuck event pages.
-- No change to how the monthly field research group is built.
+- 不用 AI 翻譯，也不加 LeekDuck 活動頁以外的新網站。
+- 每月田野調查任務組的產生方式不變。
 
-## Success Criteria
+## 成功條件
 
-- Parsing the saved adidas event page yields 3 steps' tasks with rewards; parsing the into-the-wild page (empty research list) yields no group.
-- `parse_period("台灣時間2026年11月9日10:00～2026年11月13日20:00", ...)` returns 11/9 10:00 to 11/13 20:00.
-- The saved Bahamut announcement posts (Halloween Part 1, Wild Area week) yield no task group.
-- After merge, the next daily run's log shows one or more `限時調查：` groups whenever LeekDuck lists timed research for an active event.
+- 解析存下來的 adidas 活動頁，得到 3 個步驟的任務和獎勵；解析 into-the-wild 活動頁（限時調查清單是空的）不產生任務組。
+- `parse_period("台灣時間2026年11月9日10:00～2026年11月13日20:00", ...)` 回傳 11/9 10:00 到 11/13 20:00。
+- 存下來的巴哈公告文（萬聖節 Part 1、曠野週）不產生任務組。
+- 合併後，只要 LeekDuck 有進行中活動的限時調查，下一次每日執行的紀錄就會出現一組以上的「限時調查：」。
 
-## Impact
+## 影響
 
-- Affected specs: event-research (new), bahamut-tasks, user-progress
-- Affected code:
-  - Modified: scraper/main.py, scraper/config.py, scraper/translate.py, scraper/sources/bahamut.py, scraper/sources/dates.py, scraper/sources/__init__.py, scraper/data/translations.json, tests/test_scraper.py
-  - New: scraper/sources/leekduck.py, tests/fixtures/leekduck_timed_research.html, tests/fixtures/leekduck_no_research.html
-  - Removed: none
+- 影響的規格：event-research（新）、bahamut-tasks、user-progress
+- 影響的程式：
+  - 修改：scraper/main.py、scraper/config.py、scraper/translate.py、scraper/sources/bahamut.py、scraper/sources/dates.py、scraper/sources/__init__.py、scraper/data/translations.json、tests/test_scraper.py
+  - 新增：scraper/sources/leekduck.py、tests/fixtures/leekduck_timed_research.html、tests/fixtures/leekduck_no_research.html
+  - 刪除：無

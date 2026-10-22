@@ -1,5 +1,5 @@
 <script>
-const TABS = [['overview', '總覽'], ['go', 'GO 活動'], ['tasks', '任務待辦'], ['shop', '新商品'], ['tw', '台灣活動'], ['archive', '封存']];
+const TABS = [['overview', '總覽'], ['go', 'GO 活動'], ['tasks', '任務待辦'], ['shop', '新商品'], ['tw', '台灣活動'], ['fav', '我的最愛'], ['archive', '封存']];
 const TYPE_COLORS = {
   '社群日': ['#DDF3E4', '#155B30'], '社群日經典': ['#DDF3E4', '#155B30'],
   '團體戰': ['#ECE3FA', '#4B2A85'], '團體戰日': ['#ECE3FA', '#4B2A85'], '團體戰時間': ['#ECE3FA', '#4B2A85'],
@@ -12,7 +12,8 @@ let CATEGORIES = [], REMIND_MS = 0, CONFIG = {};
 const SOURCES = ['PChome', '寶可夢中心', '官網'];
 const PAGE_SIZE = 25;
 // goCats、srcs 是多選，空陣列代表「全部」；goSort.key 為 null 時用預設排序（類型 → 開始 → 結束）
-const ui = { tab: 'overview', goCats: [], srcs: [], goSort: { key: null, dir: 1 }, shopSort: 'new', shopQuery: '', page: {} };
+// draft：任務勾選的草稿（key → true/false），按「儲存」才送出；saving：儲存中
+const ui = { draft: {}, saving: false, tab: 'overview', goCats: [], srcs: [], goSort: { key: null, dir: 1 }, shopSort: 'new', shopQuery: '', page: {} };
 let data = null;
 try { ui.tab = localStorage.getItem('tab') || 'overview'; } catch (e) {}
 
@@ -44,15 +45,96 @@ function setFlag(kind, id, value) {
     .setFlag(kind, id, value);
 }
 
+// ---------- 任務勾選草稿 ----------
+
+// 限時調查（LeekDuck ld-、巴哈 bh-）照順序做；田野調查（field-）各自獨立
+const isSequential = (groupId) => /^(ld|bh)-/.test(groupId);
+const taskKey = (g, t, i) => g.id + '#' + (t.id || i);
+const savedDone = (key) => !!data.state.taskDone[key];
+const isDone = (key) => (key in ui.draft ? ui.draft[key] : savedDone(key));
+
+/** 勾或取消第 index 項：限時調查勾第 N 項時 1～N 都勾，取消第 N 項時 N 之後都取消。 */
+function toggleTask(groupId, index, checked) {
+  const g = data.tasks.find((x) => x.id === groupId);
+  if (!g) return;
+  const keys = g.tasks.map((t, i) => taskKey(g, t, i));
+  const targets = !isSequential(groupId) ? [keys[index]] : checked ? keys.slice(0, index + 1) : keys.slice(index);
+  targets.forEach((key) => {
+    if (checked === savedDone(key)) delete ui.draft[key];
+    else ui.draft[key] = checked;
+  });
+  render();
+}
+
+const draftCount = () => Object.keys(ui.draft).length;
+
+function saveDraft() {
+  if (!draftCount() || ui.saving) return;
+  ui.saving = true;
+  renderSaveBar();
+  google.script.run
+    .withSuccessHandler((state) => { data.state = state; ui.draft = {}; ui.saving = false; render(); toast('已儲存'); })
+    .withFailureHandler(() => { ui.saving = false; render(); toast('儲存失敗，請再試一次'); })
+    .saveTasks(Object.assign({}, ui.draft));
+}
+
+function renderSaveBar() {
+  const n = draftCount();
+  document.getElementById('savebar').innerHTML = `<div class="wrap savebar-inner">
+    <span class="${n ? 'soon' : 'muted'}" style="font-size:14px;font-weight:700">${ui.saving ? '儲存中…' : n ? `有 ${n} 項變更未儲存` : '已儲存'}</span>
+    <button type="button" class="save" data-save ${n && !ui.saving ? '' : 'disabled'}>儲存</button>
+  </div>`;
+}
+
+// ---------- 我的最愛 ----------
+
+// 收藏時存的快照：新聞和商品用同一個格式
+const newsSnapshot = (n) => ({ kind: 'news', id: n.id, title: n.title, url: n.url, source: n.source, media: '', price: '', image: '', date: n.published || n.firstSeen || '' });
+const productSnapshot = (p) => ({ kind: 'product', id: p.id, title: p.name, url: p.url, source: p.source, media: p.media || '', price: p.price || '', image: p.image || '', date: p.firstSeen || '' });
+const favId = (kind, id) => kind + ':' + id;
+const isFav = (kind, id) => data.favorites.some((f) => favId(f.kind, f.id) === favId(kind, id));
+
+function findSnapshot(kind, id) {
+  const saved = data.favorites.find((f) => favId(f.kind, f.id) === favId(kind, id));
+  if (saved) return saved;
+  if (kind === 'news') { const n = data.news.find((x) => x.id === id); return n && newsSnapshot(n); }
+  const p = data.products.find((x) => x.id === id);
+  return p && productSnapshot(p);
+}
+
+/** 按星號：先更新畫面，再存到 Apps Script；失敗時還原。 */
+function toggleFav(kind, id) {
+  const item = findSnapshot(kind, id);
+  if (!item) return;
+  const on = !isFav(kind, id);
+  const prev = data.favorites;
+  data.favorites = on ? [Object.assign({ starredAt: new Date().toISOString() }, item)].concat(prev)
+    : prev.filter((f) => favId(f.kind, f.id) !== favId(kind, id));
+  render();
+  google.script.run
+    .withSuccessHandler((favs) => { data.favorites = favs; render(); })
+    .withFailureHandler((err) => {
+      data.favorites = prev; render();
+      toast(err && /已滿/.test(err.message) ? '我的最愛已滿' : '儲存失敗，請再試一次');
+    })
+    .toggleFavorite(item, on);
+}
+
+const starButton = (kind, id) => {
+  const on = isFav(kind, id);
+  return `<button type="button" class="star" data-fav="${kind}" data-id="${esc(id)}" aria-pressed="${on}" aria-label="${on ? '取消收藏' : '加入我的最愛'}">${on ? '★' : '☆'}</button>`;
+};
+
 // ---------- 整理資料 ----------
 
 function derive() {
   const now = Date.now(), s = data.state;
-  const events = data.events.map((e) => {
-    const end = e.end ? new Date(e.end).getTime() : null;
+  // 沒有結束時間的活動是 ScrapedDuck 清掉時間的舊活動，不顯示（否則剩餘時間會變成 Infinity）
+  const events = data.events.filter((e) => e.end).map((e) => {
+    const end = new Date(e.end).getTime();
     const start = e.start ? new Date(e.start).getTime() : null;
-    const left = end ? end - now : Infinity;
-    const span = end && start ? end - start : 0;
+    const left = end - now;
+    const span = start ? end - start : 0;
     return Object.assign({}, e, {
       ended: left <= 0, left,
       notStarted: start && start > now,
@@ -64,8 +146,8 @@ function derive() {
     const end = g.end ? new Date(g.end).getTime() : null;
     const left = end ? end - now : Infinity;
     const items = g.tasks.map((t, i) => {
-      const key = g.id + '#' + (t.id || i);
-      return Object.assign({}, t, { key, done: !!s.taskDone[key] });
+      const key = taskKey(g, t, i);
+      return Object.assign({}, t, { key, index: i, done: isDone(key) });
     });
     const n = items.filter((t) => t.done).length;
     return Object.assign({}, g, {
@@ -73,7 +155,9 @@ function derive() {
       soon: left > 0 && left < REMIND_MS && n < items.length,
     });
   }).sort((a, b) => a.left - b.left);
-  const products = data.products;
+  // 同一件商品可能有好幾個 PChome 編號：名稱＋價格相同只顯示第一筆
+  const seenProducts = {};
+  const products = data.products.filter((p) => !seenProducts[productKey(p)] && (seenProducts[productKey(p)] = true));
   const twNews = data.news.filter((n) => n.kind === 'event').sort((a, b) => (b.published || b.firstSeen || '').localeCompare(a.published || a.firstSeen || ''));
   return {
     activeEvents: events.filter((e) => !e.ended),
@@ -142,6 +226,8 @@ function sortButton(key, label) {
   return `<button type="button" class="th-sort" data-sort="${key}" aria-pressed="${on}">${label} <span aria-hidden="true">${arrow}</span></button>`;
 }
 
+const productKey = (p) => String(p.name || '').split(/\s+/).filter(Boolean).join(' ').toLowerCase() + '|' + (p.price || '');
+
 // 商品名稱搜尋：不分大小寫，忽略前後空白；空字串代表不篩選
 const matchesQuery = (name, query) => String(name || '').toLowerCase().includes(String(query || '').trim().toLowerCase());
 
@@ -170,11 +256,11 @@ function renderTabs() {
 function eventRows(list) {
   return list.map((e) => `
     <tr>
-      <td><a class="link" href="${esc(e.url)}" target="_blank" rel="noopener"><b>${esc(e.name)}</b></a></td>
+      <td class="col-name"><a class="link" href="${esc(e.url)}" target="_blank" rel="noopener"><b>${esc(e.name)}</b></a></td>
       <td>${tagHtml(catOf(e))}${e.type && e.type !== catOf(e) ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(e.type)}</div>` : ''}</td>
       <td class="when">${when(e.start)}</td>
       <td class="when">${when(e.end)}</td>
-      <td style="width:180px;padding-right:16px">
+      <td class="col-left">
         <div class="stack" style="gap:4px">
           <span class="${e.soon ? 'soon' : 'muted'}" style="font-size:13px;font-weight:700">${e.notStarted ? '未開始' : leftText(e.left)}</span>
           <div class="bar ${e.soon ? 'soon' : ''}"><div style="width:${e.pct}%"></div></div>
@@ -197,7 +283,7 @@ function taskGroupHtml(g) {
   const pct = Math.round(g.n / g.items.length * 100);
   return `
     <div class="card pad stack" style="gap:10px">
-      <div class="row">
+      <div class="row group-head">
         <div class="grow stack" style="gap:0">
           <a class="link" href="${esc(g.url)}" target="_blank" rel="noopener"><b style="font-size:16px">${esc(g.name)}</b></a>
           <span class="muted" style="font-size:13px">${when(g.start)} 開始 → ${when(g.end)} 結束${g.end ? ` · <b class="${g.soon ? 'soon' : ''}">剩 ${leftText(g.left)}</b>` : ''}</span>
@@ -208,41 +294,50 @@ function taskGroupHtml(g) {
       <div class="bar"><div style="width:${pct}%"></div></div>
       ${g.items.map((t) => `
         <label class="task ${t.done ? 'checked' : ''}">
-          <input type="checkbox" data-flag="taskDone" data-id="${esc(t.key)}" ${t.done ? 'checked' : ''}>
-          <span class="text">${esc(t.text)}</span>
-          <span class="reward">${t.reward ? esc(t.reward) : `<a href="${esc(g.url)}" target="_blank" rel="noopener">見原文</a>`}</span>
+          <input type="checkbox" data-task="${esc(g.id)}" data-index="${t.index}" ${t.done ? 'checked' : ''}>
+          <span class="body">
+            <span class="text">${esc(t.text)}</span>
+            <span class="reward">${t.reward ? esc(t.reward) : `<a href="${esc(g.url)}" target="_blank" rel="noopener">見原文</a>`}</span>
+          </span>
         </label>`).join('')}
     </div>`;
 }
 
-function productCard(p, isNew) {
+function productCard(p, isNew, gone) {
   const img = p.image ? ` style="background-image:url('${esc(p.image)}')"` : '';
   return `
-    <a class="card product" href="${esc(p.url)}" target="_blank" rel="noopener">
-      <div class="img"${img}>${p.image ? '' : esc(p.source)}${isNew ? '<span class="new">NEW</span>' : ''}</div>
-      <div class="info">
-        <span class="muted" style="font-size:12px">${esc(p.media ? p.source + ' · ' + p.media : p.source)} · ${when(p.firstSeen).slice(0, 5)}</span>
-        <span class="name">${esc(p.name)}</span>
-        <span class="price">${esc(p.price || '看消息')}</span>
-      </div>
-    </a>`;
+    <div class="product-wrap">
+      <a class="card product" href="${esc(p.url)}" target="_blank" rel="noopener">
+        <div class="img"${img}>${p.image ? '' : esc(p.source)}${isNew ? '<span class="new">NEW</span>' : ''}</div>
+        <div class="info">
+          <span class="muted" style="font-size:12px">${esc(p.media ? p.source + ' · ' + p.media : p.source)} · ${when(p.firstSeen).slice(0, 5)}${gone ? ' · 已下架' : ''}</span>
+          <span class="name">${esc(p.name)}</span>
+          <span class="price">${esc(p.price || '看消息')}</span>
+        </div>
+      </a>
+      ${starButton('product', p.id)}
+    </div>`;
 }
 
-function newsItem(n) {
+function newsItem(n, gone) {
   const d = new Date(n.published || n.firstSeen);
   const parts = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric', day: '2-digit' }).formatToParts(d);
   const m = parts.find((x) => x.type === 'month').value, day = parts.find((x) => x.type === 'day').value;
   const others = n.others && n.others.length ? ` · 另有 ${n.others.length} 家報導` : '';
   return `
-    <a class="card pad row link" href="${esc(n.url)}" target="_blank" rel="noopener">
-      <div class="date"><span>${m} 月</span><b>${day}</b></div>
-      <div class="grow stack" style="gap:2px"><b>${esc(n.title)}</b><span class="muted" style="font-size:13px">${esc(n.source)}${others}</span></div>
-    </a>`;
+    <div class="card pad row news-item">
+      <a class="row link grow" href="${esc(n.url)}" target="_blank" rel="noopener" style="flex-wrap:nowrap">
+        <div class="date"><span>${m} 月</span><b>${day}</b></div>
+        <div class="grow stack" style="gap:2px"><b>${esc(n.title)}</b><span class="muted" style="font-size:13px">${esc(n.source)}${others}${gone ? ' · 已下架' : ''}</span></div>
+      </a>
+      ${starButton('news', n.id)}
+    </div>`;
 }
 
 function renderOverview(d) {
   const soonEvents = d.activeEvents.filter((e) => e.soon);
-  const soonTasks = d.activeTasks.filter((g) => g.soon);
+  // 「快結束了」：沒做完、在 overviewTaskHours（預設 48 小時）內結束的任務組
+  const soonTasks = d.activeTasks.filter((g) => g.n < g.items.length && g.left < CONFIG.overviewTaskHours * HOUR);
   const allItems = d.activeTasks.flatMap((g) => g.items);
   const fresh = d.products.filter(d.isNew);
   return `
@@ -275,7 +370,7 @@ function renderGo(d) {
     <div class="toolbar only-narrow"><span class="muted">排序</span>${sortButton('type', '類型')}${sortButton('start', '開始')}${sortButton('end', '結束')}</div>
     ${items.length ? `
       <div class="card scroll only-wide"><table>
-        <thead><tr><th>活動</th><th>${sortButton('type', '類型')}</th><th>${sortButton('start', '開始')}</th><th>${sortButton('end', '結束')}</th><th>剩餘</th></tr></thead>
+        <thead><tr><th class="col-name">活動</th><th>${sortButton('type', '類型')}</th><th>${sortButton('start', '開始')}</th><th>${sortButton('end', '結束')}</th><th class="col-left">剩餘</th></tr></thead>
         <tbody>${eventRows(items)}</tbody></table></div>
       <div class="only-narrow stack" style="gap:10px">${eventCards(items)}</div>
       ${pager}` : '<p class="muted">沒有符合的活動</p>'}`;
@@ -316,6 +411,31 @@ function renderTw(d) {
     ${(items.map(newsItem).join('') || '<p class="muted">最近沒有新消息</p>') + pager}`;
 }
 
+function renderFav(d) {
+  // 收藏時間新到舊
+  const favs = data.favorites.slice().sort((a, b) => String(b.starredAt).localeCompare(String(a.starredAt)));
+  const newsIds = {}, productIds = {};
+  data.news.forEach((n) => { newsIds[n.id] = true; });
+  d.products.forEach((p) => { productIds[p.id] = true; });
+  // 快照轉回新聞／商品的欄位，沿用同樣的卡片
+  const news = favs.filter((f) => f.kind === 'news')
+    .map((f) => ({ id: f.id, title: f.title, url: f.url, source: f.source, others: [], published: f.date, gone: !newsIds[f.id] }));
+  const products = favs.filter((f) => f.kind === 'product')
+    .map((f) => ({ id: f.id, name: f.title, url: f.url, source: f.source, media: f.media, price: f.price, image: f.image, firstSeen: f.date, gone: !productIds[f.id] }));
+  if (!news.length && !products.length) {
+    return `<div class="head"><h2>我的最愛</h2></div><p class="muted">還沒有收藏，按 ☆ 加入</p>`;
+  }
+  const n = paginate(news, 'favNews'), p = paginate(products, 'favProducts');
+  return `
+    <div class="head"><h2>我的最愛</h2><span class="muted">按 ★ 取消收藏；原本的新聞或商品被移除後仍會保留在這裡</span></div>
+    <section class="stack"><h3>台灣活動</h3>
+      ${news.length ? n.items.map((x) => newsItem(x, x.gone)).join('') + n.pager : '<span class="muted">還沒有收藏的新聞</span>'}
+    </section>
+    <section class="stack"><h3>商品</h3>
+      ${products.length ? `<div class="grid">${p.items.map((x) => productCard(x, false, x.gone)).join('')}</div>${p.pager}` : '<span class="muted">還沒有收藏的商品</span>'}
+    </section>`;
+}
+
 function renderArchive(d) {
   const list = d.archivedTasks.map((g) => ({
     tag: '<span class="tag">任務</span>', name: g.name,
@@ -336,20 +456,23 @@ function renderArchive(d) {
 }
 
 const RENDERERS = {
-  overview: renderOverview, go: renderGo, tasks: renderTasks, shop: renderShop, tw: renderTw, archive: renderArchive,
+  overview: renderOverview, go: renderGo, tasks: renderTasks, shop: renderShop, tw: renderTw, fav: renderFav, archive: renderArchive,
 };
 
 function render() {
   renderTabs();
+  renderSaveBar();
   document.getElementById('main').innerHTML = (RENDERERS[ui.tab] || renderOverview)(derive());
 }
 
 // ---------- 事件 ----------
 
 document.addEventListener('click', (ev) => {
-  const t = ev.target.closest('[data-tab],[data-gocat],[data-src],[data-sort],[data-page],button[data-flag]');
+  const t = ev.target.closest('[data-tab],[data-gocat],[data-src],[data-sort],[data-page],button[data-flag],button[data-save],button[data-fav]');
   if (!t || t.disabled) return;
   const ds = t.dataset;
+  if ('save' in ds) { saveDraft(); return; }
+  if (ds.fav) { toggleFav(ds.fav, ds.id); return; }
   if (ds.tab) { ui.tab = ds.tab; try { localStorage.setItem('tab', ui.tab); } catch (e) {} window.scrollTo(0, 0); }
   else if (ds.gocat) { ui.goCats = toggleIn(ui.goCats, ds.gocat); ui.page.go = 1; }
   else if (ds.src) { ui.srcs = toggleIn(ui.srcs, ds.src); ui.page.shop = 1; }
@@ -363,8 +486,14 @@ document.addEventListener('click', (ev) => {
 });
 document.addEventListener('change', (ev) => {
   const t = ev.target;
-  if (t.matches('input[data-flag]')) setFlag(t.dataset.flag, t.dataset.id, t.checked);
+  if (t.matches('input[data-task]')) toggleTask(t.dataset.task, +t.dataset.index, t.checked);
   if (t.matches('select[data-shopsort]')) { ui.shopSort = t.value; ui.page.shop = 1; render(); }
+});
+// 有沒儲存的勾選時，離開或重新整理頁面先確認
+window.addEventListener('beforeunload', (ev) => {
+  if (!draftCount()) return;
+  ev.preventDefault();
+  ev.returnValue = '';
 });
 // 搜尋框：每打一個字就重畫列表，重畫後把焦點和游標放回搜尋框
 document.addEventListener('input', (ev) => {

@@ -1,7 +1,7 @@
-## 1. Discord notice
+## 1. Discord 通知
 
-- [x] 1.1 Add `notifyErrors_(errors, generatedAt)` called at the end of `doPost`, posting to `DISCORD_WEBHOOK_URL` and swallowing webhook failures (Source failure notice requirement). Verify: node tests with a stubbed `UrlFetchApp` — one message when errors exist, none when empty, `ok:true` when the stub throws.
+- [x] 1.1 新增 `notifyErrors_(errors, generatedAt)`，在 `doPost` 最後呼叫，發到 `DISCORD_WEBHOOK_URL`，webhook 失敗時不影響結果（抓取失敗通知）。驗證：用假的 `UrlFetchApp` 做 node 測試——有錯誤時發一則、沒有錯誤時不發、假物件丟出錯誤時仍回 `ok:true`。
 
-## 2. Overview
+## 2. 總覽
 
-- [x] 2.1 Remove the error banner from the overview renderer and `errors` from `getData` (Data loading requirement). Verify: node test that `getData()` has no `errors` key, plus manual check of 總覽. [after: 1.1]
+- [x] 2.1 拿掉總覽的錯誤橫幅和 `getData` 的 `errors`（資料載入）。驗證：node 測試確認 `getData()` 沒有 `errors`，並手動檢查總覽。[after: 1.1]

@@ -6,7 +6,8 @@ const vm = require('vm');
 
 const GAS = path.join(__dirname, '..', '..', 'gas');
 
-function loadApp(data) {
+function loadApp(data, opts = {}) {
+  const calls = { saveTasks: [], toggleFavorite: [] };
   const html = fs.readFileSync(path.join(GAS, 'App.html'), 'utf8');
   const code = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
   const elements = {};
@@ -19,6 +20,19 @@ function loadApp(data) {
     withFailureHandler(fn) { handlers.failure = fn; return runner; },
     getData() { handlers.success(data); },
     setFlag() {},
+    toggleFavorite(item, on) {
+      calls.toggleFavorite.push([item, on]);
+      if (opts.favFails) return handlers.failure(new Error('down'));
+      const rest = data.favorites.filter((f) => !(f.kind === item.kind && f.id === item.id));
+      handlers.success(on ? [Object.assign({ starredAt: new Date().toISOString() }, item)].concat(rest) : rest);
+    },
+    saveTasks(changes) {
+      calls.saveTasks.push(changes);
+      if (opts.saveFails) return handlers.failure(new Error('down'));
+      const taskDone = Object.assign({}, data.state.taskDone);
+      Object.keys(changes).forEach((k) => { if (changes[k]) taskDone[k] = true; else delete taskDone[k]; });
+      handlers.success(Object.assign({}, data.state, { taskDone }));
+    },
   };
   const context = {
     console, Intl, Date, setTimeout, clearTimeout,
@@ -27,13 +41,13 @@ function loadApp(data) {
       addEventListener(type, fn) { listeners[type] = fn; },
       querySelector: (sel) => (sel === 'input[data-shopquery]' ? searchBox : null),
     },
-    window: { scrollTo() {} },
+    window: { scrollTo() {}, addEventListener(type, fn) { listeners['window:' + type] = fn; } },
     localStorage: { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } },
     google: { script: { run: runner } },
   };
   vm.createContext(context);
-  vm.runInContext(code + '\n;this.__app = { ui, render, matchesQuery: typeof matchesQuery === "function" ? matchesQuery : null };', context);
-  return { app: context.__app, main: el('main'), elements, listeners, searchBox };
+  vm.runInContext(code + '\n;this.__app = { ui, render, matchesQuery, toggleTask, draftCount };', context);
+  return { app: context.__app, main: el('main'), savebar: el('savebar'), elements, listeners, searchBox, calls };
 }
 
 function sampleData(overrides = {}) {
@@ -51,6 +65,7 @@ function sampleData(overrides = {}) {
     ],
     news: [{ id: 'n1', kind: 'event', title: '寶可夢嘉年華', url: 'u', source: '寶可夢官網', others: ['A 報'], published: iso(-3), firstSeen: iso(-1) }],
     state: { taskDone: {}, gaveUp: {} },
+    favorites: [],
     config: board,
   }, overrides);
 }

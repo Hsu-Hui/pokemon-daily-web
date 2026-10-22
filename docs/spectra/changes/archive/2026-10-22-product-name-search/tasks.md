@@ -1,4 +1,4 @@
-## 1. Search box
+## 1. 搜尋框
 
-- [x] 1.1 Add the search input and `ui.shopQuery` filtering to the shop renderer, combined with source filter, sort and pagination, resetting to page 1 and keeping focus/caret across re-render (Product name search requirement). Verify: node test of the exported `matchesQuery(name, query)` helper over the example table, plus manual check on the deployed page that typing does not lose focus.
-- [x] 1.2 Show 「找不到符合「…」的商品」 when nothing matches. Verify: manual check on the deployed page. [after: 1.1]
+- [x] 1.1 在新商品頁加搜尋框和 `ui.shopQuery` 篩選，與來源篩選、排序、分頁一起作用，回到第 1 頁，重畫時保持焦點和游標（商品名稱搜尋）。驗證：node 測試用範例表測 `matchesQuery(name, query)`，並在部署後的頁面手動確認打字時焦點不會跳走。
+- [x] 1.2 沒有符合的商品時顯示「找不到符合「…」的商品」。驗證：在部署後的頁面手動確認。[after: 1.1]

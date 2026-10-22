@@ -5,4 +5,4 @@ from .leekduck import active_events, fetch_event_research, parse_event_research
 from .models import GoEvent, News, Product, Research, TaskGroup, task_id
 from .news import _clean_title, dedupe_news, fetch_google_news, similarity
 from .official import fetch_official_news, parse_official_news
-from .pchome import fetch_pchome
+from .pchome import fetch_pchome, product_key

@@ -3,7 +3,7 @@
  *
  * - doPost：GitHub Actions 每天凌晨把爬到的資料送進來，存到這個試算表；有來源抓取失敗時發 Discord。
  * - doGet：看板網頁。
- * - remindTasks：每小時檢查，任務快結束還沒完成就發 Discord。
+ * - remindTasks：每小時檢查，任務結束前 2 天提醒一次，最後 4 小時每小時提醒。
  *
  * 勾選、放棄的紀錄存在每個人自己的 UserProperties，互不影響。
  * 保留天數、提醒時間等設定在 shared/board.json（這裡用產生的 Board.gs 裡的 BOARD）。
@@ -202,8 +202,56 @@ function getData() {
     products: readRows_('products'),
     news: readRows_('news'),
     state: loadState_(),
+    favorites: listFavorites_(),
     config: BOARD,
   };
+}
+
+// ---------- 我的最愛 ----------
+
+const FAV_PREFIX = 'fav:';
+const FAV_MAX = 500;              // 每人最多收藏幾筆（UserProperties 總共 500 KB）
+const FAV_FIELD_MAX = 300;        // 每個欄位最多幾個字
+const FAV_FIELDS = ['kind', 'id', 'title', 'url', 'source', 'media', 'price', 'image', 'date'];
+
+/** 每筆收藏各存一個屬性：fav:<種類>:<id 的 SHA-1 前 16 碼>，內容是收藏當時的快照。 */
+function favKey_(kind, id) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_1, id, Utilities.Charset.UTF_8);
+  const hex = bytes.map((b) => ((b + 256) % 256).toString(16).padStart(2, '0')).join('');
+  return FAV_PREFIX + kind + ':' + hex.slice(0, 16);
+}
+
+function listFavorites_() {
+  const props = PropertiesService.getUserProperties().getProperties();
+  return Object.keys(props)
+    .filter((k) => k.indexOf(FAV_PREFIX) === 0)
+    .map((k) => JSON.parse(props[k]))
+    .sort((a, b) => String(b.starredAt).localeCompare(String(a.starredAt)));
+}
+
+/** 網頁呼叫：on 為 true 時收藏 item（存快照），false 時取消。回傳目前全部收藏。 */
+function toggleFavorite(item, on) {
+  const snap = {};
+  FAV_FIELDS.forEach((f) => { snap[f] = String((item && item[f]) || '').slice(0, FAV_FIELD_MAX); });
+  if (['news', 'product'].indexOf(snap.kind) < 0 || !snap.id || !snap.title || !/^https?:\/\//.test(snap.url)) {
+    throw new Error('bad favorite');
+  }
+  const lock = LockService.getUserLock();
+  lock.waitLock(10000);
+  try {
+    const props = PropertiesService.getUserProperties();
+    const key = favKey_(snap.kind, snap.id);
+    if (!on) {
+      props.deleteProperty(key);
+    } else if (!props.getProperty(key)) {
+      if (listFavorites_().length >= FAV_MAX) throw new Error('我的最愛已滿');
+      snap.starredAt = new Date().toISOString();
+      props.setProperty(key, JSON.stringify(snap));
+    }
+    return listFavorites_();
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /** 網頁呼叫：kind 是 taskDone / gaveUp，value 為 false 時取消。 */
@@ -222,6 +270,26 @@ function setFlag(kind, id, value) {
   }
 }
 
+/** 網頁按「儲存」：一次寫入多個任務勾選，changes 是 { "任務組id#任務id": true/false }。 */
+function saveTasks(changes) {
+  const keys = Object.keys(changes || {});
+  const ok = keys.every((k) => /^[^#]+#[^#]+$/.test(k) && typeof changes[k] === 'boolean');
+  if (!ok) throw new Error('bad change');
+  const lock = LockService.getUserLock();
+  lock.waitLock(10000);
+  try {
+    const state = loadState_();
+    keys.forEach((k) => {
+      if (changes[k]) state.taskDone[k] = true;
+      else delete state.taskDone[k];
+    });
+    PropertiesService.getUserProperties().setProperty('state', JSON.stringify(state));
+    return state;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // ---------- Discord 任務提醒 ----------
 
 function remindTasks() {
@@ -230,12 +298,19 @@ function remindTasks() {
   const viewUrl = PropertiesService.getScriptProperties().getProperty('VIEW_URL');
   const state = loadState_();
   const now = new Date();
-  readRows_('tasks').forEach((g) => {
+  // 結束前 earlyRemindHours 小時先提醒一次（記在 earlyReminded），最後 remindHours 小時每小時提醒
+  const props = PropertiesService.getUserProperties();
+  const early = JSON.parse(props.getProperty('earlyReminded') || '{}');
+  const groups = readRows_('tasks');
+  groups.forEach((g) => {
     if (!g.end || state.gaveUp[g.id]) return;
     const left = new Date(g.end) - now;
-    if (left <= 0 || left > BOARD.remindHours * 3600 * 1000) return;
+    if (left <= 0 || left > BOARD.earlyRemindHours * 3600 * 1000) return;
+    const hourly = left <= BOARD.remindHours * 3600 * 1000;
+    if (!hourly && early[g.id]) return;
     const todo = g.tasks.filter((t, i) => !state.taskDone[g.id + '#' + (t.id || i)]);
     if (!todo.length) return;
+    if (!hourly) early[g.id] = true;
     const h = Math.floor(left / 3600000);
     const m = Math.floor((left % 3600000) / 60000);
     const lines = [
@@ -250,6 +325,10 @@ function remindTasks() {
       payload: JSON.stringify({ content: lines.join('\n').slice(0, 1900) }),
     });
   });
+  // 只留還存在的任務組，避免紀錄越積越多
+  const ids = {};
+  groups.forEach((g) => { if (early[g.id]) ids[g.id] = true; });
+  props.setProperty('earlyReminded', JSON.stringify(ids));
 }
 
 // ---------- 第一次設定 ----------

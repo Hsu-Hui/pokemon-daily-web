@@ -7,8 +7,12 @@ const GAS = path.join(__dirname, '..', '..', 'gas');
 
 function load(overrides = {}) {
   const props = Object.assign({ INGEST_SECRET: 'secret' }, overrides.scriptProps);
+  // 每個使用者自己的 UserProperties（user 預設 'me'）
+  const userStores = overrides.userStores || {};
+  const userStore = () => (userStores[context.user] = userStores[context.user] || {});
   const fetched = [];
   const context = {
+    user: 'me',
     console,
     ContentService: {
       MimeType: { JSON: 'json' },
@@ -16,7 +20,12 @@ function load(overrides = {}) {
     },
     PropertiesService: {
       getScriptProperties: () => ({ getProperty: (k) => (k in props ? props[k] : null) }),
-      getUserProperties: () => ({ getProperty: () => null, setProperty() {} }),
+      getUserProperties: () => ({
+        getProperty: (k) => (k in userStore() ? userStore()[k] : null),
+        setProperty: (k, v) => { userStore()[k] = String(v); },
+        deleteProperty: (k) => { delete userStore()[k]; },
+        getProperties: () => Object.assign({}, userStore()),
+      }),
     },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }), getUserLock: () => ({ waitLock() {}, releaseLock() {} }) },
     UrlFetchApp: {
@@ -26,7 +35,13 @@ function load(overrides = {}) {
       },
     },
     Logger: { log() {} },
-    Utilities: { formatDate: (d) => d.toISOString() },
+    Utilities: {
+      formatDate: (d) => d.toISOString(),
+      DigestAlgorithm: { SHA_1: 'sha1' },
+      Charset: { UTF_8: 'utf8' },
+      // Apps Script 回傳有號位元組（-128～127）
+      computeDigest: (alg, text) => [...require('crypto').createHash(alg).update(text, 'utf8').digest()].map((b) => (b > 127 ? b - 256 : b)),
+    },
   };
   vm.createContext(context);
   for (const file of ['Board.gs', 'Code.gs']) {
@@ -36,7 +51,7 @@ function load(overrides = {}) {
   const sheets = {};
   context.readRows_ = (key) => (sheets[key] || []).map((r) => Object.assign({}, r));
   context.writeRows_ = (key, rows) => { sheets[key] = rows; };
-  return { gas: context, sheets, fetched };
+  return { gas: context, sheets, fetched, userStores };
 }
 
 module.exports = { load };

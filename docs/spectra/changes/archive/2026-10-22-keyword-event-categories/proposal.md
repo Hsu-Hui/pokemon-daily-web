@@ -1,26 +1,26 @@
-## Summary
+## 摘要
 
-Put GO events into a tab (category) when their name contains that tab's keyword, using a keyword table that Ryan can edit in `shared/board.json`.
+GO 活動名稱含某個分頁（分類）的關鍵字時，就歸到那個分類。關鍵字表放在 `shared/board.json`，Ryan 可以自己修改。
 
-## Motivation
+## 動機
 
-Events with a generic ScrapedDuck type such as `event` land in 其他 even when the name clearly says what they are (for example "Dynamax Trails" or "GO Pass: Halloween"). The current name rules are hard-coded English regexes in `translate.event_category`, and only cover three tabs.
+ScrapedDuck 類型是 `event` 這種通用類型的活動，就算名稱已經寫明是什麼（例如「Dynamax Trails」「GO Pass: Halloween」），還是會被歸到「其他」。目前的名稱規則是寫死在 `translate.event_category` 裡的英文正規表示式，而且只涵蓋三個分類。
 
-## Proposed Solution
+## 解決方式
 
-- Each category in `shared/board.json` gets a `keywords` list (English and Chinese).
-- `event_category(type_slug, name, name_zh)` keeps the type-slug table first; if the slug is not mapped, it checks the English name and the translated Chinese name against each category's keywords in tab order (case-insensitive) and picks the first match; otherwise 其他.
-- Tests cover a table of example names.
+- `shared/board.json` 的每個分類加上 `keywords` 清單（英文和中文）。
+- `event_category(type_slug, name, name_zh)` 先查類型對照表；類型對不到時，依分頁順序檢查英文原名和翻譯後的中文名稱是否含該分類的關鍵字（不分大小寫），取第一個符合的；都不符合就是「其他」。
+- 測試涵蓋一張範例名稱表。
 
-## Non-Goals (optional)
+## 不做的事
 
-- No keyword matching in the browser; categories are decided by the scraper each day.
-- No change to the slug table.
+- 不在瀏覽器端比對關鍵字；分類每天由爬蟲決定。
+- 類型對照表不變。
 
-## Impact
+## 影響
 
-- Affected specs: go-events
-- Affected code:
-  - Modified: shared/board.json, gas/Board.gs, scraper/translate.py, scraper/main.py, tests/test_scraper.py, README.md
-  - New: none
-  - Removed: none
+- 影響的規格：go-events
+- 影響的程式：
+  - 修改：shared/board.json、gas/Board.gs、scraper/translate.py、scraper/main.py、tests/test_scraper.py、README.md
+  - 新增：無
+  - 刪除：無

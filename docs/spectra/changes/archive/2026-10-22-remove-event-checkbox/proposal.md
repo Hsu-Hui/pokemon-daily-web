@@ -1,27 +1,27 @@
-## Summary
+## 摘要
 
-Remove the 完成 checkbox from GO events. Events stay on the GO 活動 tab until they end and then move to 封存 automatically.
+拿掉 GO 活動的「完成」勾選方塊。活動留在 GO 活動頁直到結束，結束後自動移到封存。
 
-## Motivation
+## 動機
 
-Ryan does not want to tick off events; marking an event as done adds a step that nothing else uses (reminders only cover task groups).
+Ryan 不想一個一個勾活動；勾選活動完成多了一個步驟，而且沒有其他功能用到它（提醒只針對任務組）。
 
-## Proposed Solution
+## 解決方式
 
-- GO 活動 table and cards no longer show a checkbox or a 完成 column; the tab lists every event that has not ended.
-- 總覽's first stat becomes 「進行中活動」 (started and not ended).
-- 封存 lists ended events only, without a 復原 button; given-up task groups keep their 復原 button.
-- `setFlag` accepts only `taskDone` and `gaveUp`; old `done` entries in UserProperties are ignored.
+- GO 活動的表格和卡片不再有勾選方塊和「完成」欄；所有還沒結束的活動都列出來。
+- 總覽第一個數字改成「進行中活動」（已開始且未結束）。
+- 封存只列已結束的活動，沒有「復原」按鈕；已放棄的任務組仍保留「復原」。
+- `setFlag` 只接受 `taskDone` 和 `gaveUp`；UserProperties 裡舊的 `done` 紀錄會被忽略。
 
-## Non-Goals (optional)
+## 不做的事
 
-- No change to task checkboxes, 放棄, or Discord reminders.
-- No migration that deletes stored `done` flags.
+- 任務勾選、「放棄」和 Discord 提醒都不變。
+- 不寫程式刪除已存的 `done` 紀錄。
 
-## Impact
+## 影響
 
-- Affected specs: dashboard, user-progress
-- Affected code:
-  - Modified: gas/App.html, gas/Code.gs, tests/gas/app.test.js, tests/gas/merge.test.js
-  - New: none
-  - Removed: none
+- 影響的規格：dashboard、user-progress
+- 影響的程式：
+  - 修改：gas/App.html、gas/Code.gs、tests/gas/app.test.js、tests/gas/merge.test.js
+  - 新增：無
+  - 刪除：無
