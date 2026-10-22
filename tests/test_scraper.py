@@ -65,13 +65,6 @@ class NewsTests(unittest.TestCase):
         self.assertEqual(out[0]["source"], "寶可夢官網")
         self.assertEqual(out[0]["others"], ["D 報"])
 
-    def test_product_news_becomes_product(self):
-        official = main.news_to_product({"id": "o", "title": "新商品發售", "url": "u", "source": "寶可夢官網"})
-        center = main.news_to_product({"id": "c", "title": "寶可夢中心台北聖誕新品", "url": "u", "source": "上報"})
-        self.assertEqual((official["source"], official["media"], official["price"]), ("官網", "", ""))
-        self.assertEqual((center["source"], center["name"], center["media"]), ("寶可夢中心", "寶可夢中心台北聖誕新品", "上報"))
-        self.assertEqual(set(center), {"id", "source", "name", "url", "price", "image", "media"})
-
     def test_collect_splits_products_and_news(self):
         official = [sources.News("o1", "寶可夢中心新商品發售", "u", "寶可夢官網", NOW, category="商品"),
                     sources.News("o2", "寶可夢嘉年華活動開跑", "u", "寶可夢官網", NOW)]
@@ -80,8 +73,8 @@ class NewsTests(unittest.TestCase):
             fetch_event_research=lambda events, now: [], fetch_pchome=lambda: [], fetch_official_news=lambda now: official, fetch_google_news=lambda q, now: [],
         ):
             payload = main.collect(NOW)
-        self.assertEqual([p["id"] for p in payload["products"]], ["o1"])
-        self.assertEqual([(n["id"], n["kind"]) for n in payload["news"]], [("o2", "event")])
+        self.assertEqual(payload["products"], [])
+        self.assertEqual([(n["id"], n["kind"]) for n in payload["news"]], [("o1", "product"), ("o2", "event")])
 
 
 class OfficialTests(unittest.TestCase):

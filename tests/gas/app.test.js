@@ -24,11 +24,17 @@ test('settings text comes from board.json', () => {
   assert.match(main.innerHTML, /結束前 6 小時/);
 });
 
-test('products tab shows announcements without price as 看消息', () => {
-  const { app, main } = loadApp(sampleData());
+test('products tab shows only PChome; old announcement rows move to 活動&新聞', () => {
+  const data = sampleData();
+  data.products.push({ id: 'p3', source: 'PChome', name: '沒有價格的玩偶', url: 'u', price: '', image: '', firstSeen: new Date().toISOString(), media: '' });
+  const { app, main } = loadApp(data);
   app.ui.tab = 'shop'; app.render();
-  assert.match(main.innerHTML, /寶可夢 伊布 馬克杯[\s\S]*看消息/);
   assert.match(main.innerHTML, /\$1,280/);
+  assert.match(main.innerHTML, /沒有價格的玩偶[\s\S]*看消息/);
+  assert.ok(!main.innerHTML.includes('寶可夢 伊布 馬克杯'), 'official announcement is not a product');
+  assert.ok(!main.innerHTML.includes('data-src'), 'no source pills on 新商品');
+  app.ui.tab = 'tw'; app.render();
+  assert.match(main.innerHTML, /寶可夢 伊布 馬克杯/);
 });
 
 test('matchesQuery follows the product search examples', () => {
@@ -163,6 +169,9 @@ test('ticks stay as a draft until saved, then saved in one call', () => {
   const ev = { preventDefault() { this.prevented = true; } };
   listeners['window:beforeunload'](ev);
   assert.ok(ev.prevented, 'leaving with unsaved changes asks first');
+  assert.strictEqual(savebar.innerHTML, '', 'save bar only on 任務待辦');
+  app.ui.tab = 'tasks'; app.render();
+  assert.match(savebar.innerHTML, /有 3 項變更未儲存/);
   listeners.click({ target: { closest: () => ({ disabled: false, dataset: { save: '' } }) } });
   assert.strictEqual(calls.saveTasks.length, 1);
   assert.deepStrictEqual(Object.keys(calls.saveTasks[0]).sort(), ['ld-adidas#t1', 'ld-adidas#t2', 'ld-adidas#t3']);
@@ -198,9 +207,9 @@ test('every news item and product card has a star outside its link', () => {
     assert.ok(links.every((a) => !a.includes('class="star"')), tab + ': star inside a link');
   }
   app.ui.tab = 'tw'; app.render();
-  assert.strictEqual((main.innerHTML.match(/class="star"/g) || []).length, 1);
-  app.ui.tab = 'shop'; app.render();
   assert.strictEqual((main.innerHTML.match(/class="star"/g) || []).length, 2);
+  app.ui.tab = 'shop'; app.render();
+  assert.strictEqual((main.innerHTML.match(/class="star"/g) || []).length, 1);
 });
 
 test('starring a news item shows it on 我的最愛 and unstarring removes it', () => {
@@ -245,4 +254,41 @@ test('我的最愛 tab sits between 台灣活動 and 封存', () => {
   app.render();
   const order = elements.tabs.innerHTML.match(/data-tab="(\w+)"/g).map((x) => x.slice(10, -1));
   assert.deepStrictEqual(order.slice(4), ['tw', 'fav', 'archive']);
+});
+
+test('活動&新聞 source pills follow the feed table and reset to page 1', () => {
+  const data = sampleData();
+  const now = new Date().toISOString();
+  data.news = [
+    { id: 'o1', kind: 'event', title: '官網活動公告', url: 'u', source: '寶可夢官網', others: [], published: now },
+    { id: 'o2', kind: 'product', title: '官網商品公告', url: 'u', source: '寶可夢官網', others: [], published: now },
+    { id: 'c1', kind: 'product', title: '寶可夢中心新品報導', url: 'u', source: '上報', others: [], published: now },
+    { id: 'e1', kind: 'event', title: '台灣快閃活動報導', url: 'u', source: '自由時報', others: [], published: now },
+  ];
+  data.products = data.products.filter((p) => p.source === 'PChome');
+  const { app, main, listeners, elements } = loadApp(data);
+  app.ui.tab = 'tw'; app.ui.page.tw = 2; app.render();
+  assert.match(elements.tabs.innerHTML, /活動&新聞/);
+  const pick = (feed) => listeners.click({ target: { closest: () => ({ disabled: false, dataset: { feed } }) } });
+  pick('官方');
+  assert.strictEqual(app.ui.page.tw, 1);
+  assert.match(main.innerHTML, /官網活動公告/);
+  assert.match(main.innerHTML, /官網商品公告/);
+  assert.ok(!main.innerHTML.includes('寶可夢中心新品報導') && !main.innerHTML.includes('台灣快閃活動報導'));
+  pick('官方'); pick('新聞');
+  assert.match(main.innerHTML, /寶可夢中心新品報導/);
+  assert.ok(!main.innerHTML.includes('官網活動公告') && !main.innerHTML.includes('台灣快閃活動報導'));
+  pick('新聞'); pick('活動');
+  assert.match(main.innerHTML, /台灣快閃活動報導/);
+  assert.match(main.innerHTML, /data-feed="官方"[^>]*>官方 2/);
+});
+
+test('old 寶可夢中心 product rows show under 新聞 and can be starred', () => {
+  const data = sampleData();
+  data.products.push({ id: 'c-old', source: '寶可夢中心', name: '寶可夢中心聖誕新品', url: 'https://c', price: '', image: '', firstSeen: new Date().toISOString(), media: '上報' });
+  const { app, main, listeners, calls } = loadApp(data);
+  app.ui.tab = 'tw'; app.ui.feeds = ['新聞']; app.render();
+  assert.match(main.innerHTML, /寶可夢中心聖誕新品[\s\S]*上報/);
+  listeners.click({ target: { closest: () => ({ disabled: false, dataset: { fav: 'news', id: 'c-old' } }) } });
+  assert.strictEqual(calls.toggleFavorite[0][0].title, '寶可夢中心聖誕新品');
 });
