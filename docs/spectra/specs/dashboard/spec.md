@@ -28,7 +28,7 @@ Apps Script 提供的看板網頁，顯示活動、任務、新商品、台灣�
 ---
 ### Requirement: 分頁
 
-看板 SHALL 有六個分頁：總覽、GO 活動、任務待辦、新商品、台灣活動、封存；目前分頁 SHALL 記在瀏覽器 localStorage，下次開啟沿用。
+看板 SHALL 有七個分頁：總覽、GO 活動、任務待辦、新商品、台灣活動、我的最愛、封存；目前分頁 SHALL 記在瀏覽器 localStorage，下次開啟沿用。
 
 #### Scenario: 總覽內容
 
@@ -40,28 +40,33 @@ Apps Script 提供的看板網頁，顯示活動、任務、新商品、台灣�
 - **WHEN** 某任務組 40 小時後結束且還有 3 項未完成
 - **THEN** 該組 SHALL 出現在「快結束了，還沒完成」，顯示「剩 40 小時 · 3 項未完成」
 
+#### Scenario: 我的最愛分頁位置
+
+- **WHEN** 使用者打開看板
+- **THEN** 「我的最愛」SHALL 位在「台灣活動」與「封存」之間
+
 
 <!-- @trace
-source: task-progress-save
+source: add-favorites
 updated: 2026-10-22
 code:
-  - .spectra.yaml
   - gas/Index.html
-  - shared/board.json
-  - tests/gas/app.js
-  - gas/Styles.html
-  - scraper/sources/pchome.py
-  - gas/Board.gs
-  - gas/App.html
   - scraper/sources/__init__.py
-  - gas/Code.gs
-  - tests/gas/load.js
   - README.md
   - scraper/main.py
+  - gas/App.html
+  - tests/gas/app.js
+  - scraper/sources/pchome.py
+  - tests/gas/load.js
+  - gas/Code.gs
+  - .spectra.yaml
+  - gas/Board.gs
+  - shared/board.json
+  - gas/Styles.html
 tests:
   - tests/test_scraper.py
-  - tests/gas/merge.test.js
   - tests/gas/app.test.js
+  - tests/gas/merge.test.js
 -->
 
 ---
