@@ -292,3 +292,99 @@ test('old 寶可夢中心 product rows show under 新聞 and can be starred', ()
   listeners.click({ target: { closest: () => ({ disabled: false, dataset: { fav: 'news', id: 'c-old' } }) } });
   assert.strictEqual(calls.toggleFavorite[0][0].title, '寶可夢中心聖誕新品');
 });
+
+// ---------- GO 活動行事曆 ----------
+
+const DAY = 864e5, HOUR = 36e5, TZ = 8 * HOUR;
+/** 台灣時間本週一往後 weeks 週的日期編號 */
+function mondayNo(weeks) {
+  const today = Math.floor((Date.now() + TZ) / DAY);
+  return today - ((new Date(today * DAY).getUTCDay() + 6) % 7) + weeks * 7;
+}
+const at = (day, h) => new Date(day * DAY - TZ + h * HOUR).toISOString();
+const mmdd = (day) => new Date(day * DAY).toISOString().slice(5, 10).replace('-', '/');
+const click = (listeners, dataset) => listeners.click({ target: { closest: () => ({ disabled: false, dataset }) } });
+/** 寬螢幕行事曆裡某活動色條的 HTML */
+const wideBar = (html, id) => {
+  const wide = html.slice(html.indexOf('only-wide stack'), html.indexOf('only-narrow stack'));
+  return (wide.match(new RegExp(`<a class="cal-bar[^"]*"[^>]*data-cal="${id}"[^>]*>[^<]*</a>`)) || [''])[0];
+};
+
+test('calendar bars follow the example table', () => {
+  const b = mondayNo(2);
+  const ev = (id, s, e, category = '其他') => ({ id, name: '活動 ' + id, type: '活動', category, url: 'u', start: s, end: e, firstSeen: at(b, 0) });
+  const data = sampleData({ events: [
+    ev('a', at(b - 22, 10), at(b + 12, 20), 'GO Pass'),
+    ev('b', at(b + 3, 10), at(b + 9, 20)),
+    ev('c', at(b + 8, 18), at(b + 8, 19), '聚焦時刻'),
+    ev('d', at(b + 9, 10), at(b + 15, 20)),
+    ev('e', at(b + 11, 0), at(b + 12, 0)),
+  ] });
+  const { app, main } = loadApp(data);
+  app.ui.tab = 'go'; app.ui.calWeek = 2; app.render();
+  assert.match(main.innerHTML, new RegExp(`${mmdd(b)} – ${mmdd(b + 13)}`));
+  const rows = [
+    ['a', 2, 13, true, false, `‹ ${mmdd(b - 22)} – ${mmdd(b + 12)}`],
+    ['b', 5, 7, false, false, `${mmdd(b + 3)} – ${mmdd(b + 9)}`],
+    ['c', 10, 1, false, false, '18:00'],
+    ['d', 11, 5, false, true, `${mmdd(b + 9)} – ${mmdd(b + 15)} ›`],
+    ['e', 13, 1, false, false, '00:00'],
+  ];
+  for (const [id, col, span, cutL, cutR, text] of rows) {
+    const bar = wideBar(main.innerHTML, id);
+    assert.ok(bar, id);
+    assert.match(bar, new RegExp(`grid-column:${col} / span ${span};`), id);
+    assert.strictEqual(/cut-l/.test(bar), cutL, id + ' cut-l');
+    assert.strictEqual(/cut-r/.test(bar), cutR, id + ' cut-r');
+    assert.ok(bar.endsWith(`>${text}</a>`), `${id}: ${bar}`);
+  }
+  // 依開始時間排序；GO Pass 用第 4 個顏色，聚焦時刻用第 1 個
+  const ids = main.innerHTML.slice(main.innerHTML.indexOf('only-wide stack'), main.innerHTML.indexOf('only-narrow stack')).match(/data-cal="(\w)"/g);
+  assert.deepStrictEqual(ids.map((x) => x[10]), ['a', 'b', 'c', 'd', 'e']);
+  assert.match(wideBar(main.innerHTML, 'a'), /background:#BBD4FA/);
+  assert.match(wideBar(main.innerHTML, 'c'), /background:#FFE08A/);
+});
+
+test('calendar narrow view shows 7 days and today is marked', () => {
+  const { app, main } = loadApp(sampleData());
+  app.ui.tab = 'go'; app.render();
+  const narrow = main.innerHTML.slice(main.innerHTML.indexOf('only-narrow stack'));
+  assert.strictEqual((narrow.match(/class="cal-day/g) || []).length, 7);
+  // 窄螢幕從今天開始
+  assert.match(narrow.match(/class="cal-day[^"]*"/)[0], /today/);
+  assert.match(main.innerHTML, /cal-day[^"]*today[^>]*><b>[^<]*<\/b>今天/);
+  assert.match(main.innerHTML, /class="cal-today"/);
+});
+
+test('calendar follows category filter, week buttons and collapse', () => {
+  const b = mondayNo(0);
+  const data = sampleData();
+  data.events.push({ id: 'pass', name: '十月 GO Pass', type: '活動', category: 'GO Pass', url: 'u', start: at(b - 3, 10), end: at(b + 30, 20), firstSeen: at(b, 0) });
+  const store = {};
+  const storage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };
+  const { app, main, listeners } = loadApp(data, { storage });
+  app.ui.tab = 'go'; app.render();
+  assert.ok(wideBar(main.innerHTML, 'e1') && wideBar(main.innerHTML, 'pass'));
+  click(listeners, { gocat: '聚焦時刻' });
+  assert.ok(wideBar(main.innerHTML, 'e1') && !wideBar(main.innerHTML, 'pass'));
+  click(listeners, { gocat: '全部' });
+  click(listeners, { calmove: '1' }); click(listeners, { calmove: '1' });
+  assert.strictEqual(app.ui.calWeek, 2);
+  assert.match(main.innerHTML, new RegExp(`${mmdd(b + 14)} – ${mmdd(b + 27)}`));
+  assert.ok(!wideBar(main.innerHTML, 'e1'), 'e1 ends today');
+  click(listeners, { calmove: '0' });
+  assert.match(main.innerHTML, new RegExp(`${mmdd(b)} – ${mmdd(b + 13)}`));
+  click(listeners, { caltoggle: '1' });
+  assert.strictEqual(store.calOpen, '0');
+  assert.ok(!main.innerHTML.includes('cal-bar') && /data-caltoggle[^>]*>展開/.test(main.innerHTML));
+  // 重新整理後仍是收合
+  const again = loadApp(data, { storage });
+  again.app.ui.tab = 'go'; again.app.render();
+  assert.ok(!again.main.innerHTML.includes('cal-bar'));
+});
+
+test('calendar shows a hint when nothing falls in the range', () => {
+  const { app, main } = loadApp(sampleData());
+  app.ui.tab = 'go'; app.ui.calWeek = 5; app.render();
+  assert.match(main.innerHTML, /這段期間沒有活動/);
+});
