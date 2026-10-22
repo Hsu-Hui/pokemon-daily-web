@@ -201,3 +201,38 @@ GO 活動、任務待辦、新商品、台灣活動、封存的列表 SHALL 每�
 | POKEMON 卡牌 禮盒 | pokemon | 是 |
 | 寶可夢 伊布 馬克杯 | 皮卡丘 | 否 |
 | 寶可夢 伊布 馬克杯 | "  伊布 " | 是 |
+
+---
+### Requirement: 排版不擠壓
+
+所有分頁在 375、768、1280 px 寬度下，活動名稱、任務文字、新聞標題與商品名稱 SHALL 以整行換行顯示，不得被其他欄位擠壓成每行少於 12 個字，表格欄位 SHALL 不被裁切。GO 活動表格的活動名稱欄 SHALL 至少 240 px；手機寬度下任務的獎勵 SHALL 顯示在任務文字下方，任務組標題 SHALL 獨占一行；分頁列在窄螢幕 SHALL 為可橫向捲動的單行。
+
+#### Scenario: 電腦上的長活動名稱
+
+- **WHEN** 在 1280 px 寬度打開 GO 活動，活動名稱為「極巨對戰日：極巨化由克希、艾姆利多、亞克諾姆」
+- **THEN** 名稱 SHALL 在名稱欄內最多兩行顯示，「剩餘」欄 SHALL 完整可見
+
+#### Scenario: 手機上的任務文字
+
+- **WHEN** 在 375 px 寬度打開任務待辦
+- **THEN** 任務文字 SHALL 使用整列寬度，獎勵顯示在下一行
+
+#### Scenario: 頁面上沒有結束時間的活動
+
+- **WHEN** 試算表裡還有沒有結束時間的舊活動
+- **THEN** 看板 SHALL 不顯示該活動，頁面上 SHALL 不出現「Infinity」
+
+<!-- @trace
+source: fix-board-display
+updated: 2026-10-22
+code:
+  - .spectra.yaml
+  - scraper/sources/__init__.py
+  - gas/Styles.html
+  - scraper/sources/pchome.py
+  - scraper/main.py
+  - gas/App.html
+tests:
+  - tests/gas/app.test.js
+  - tests/test_scraper.py
+-->

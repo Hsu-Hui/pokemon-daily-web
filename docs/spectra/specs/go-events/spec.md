@@ -18,7 +18,7 @@
 ---
 ### Requirement: 活動篩選
 
-系統 SHALL 排除 `eventType` 為 `season` 或 `go-battle-league` 的活動、已結束的活動，以及開始時間在 14 天（`GO_LOOKAHEAD_DAYS`）之後的活動。
+系統 SHALL 排除 `eventType` 為 `season` 或 `go-battle-league` 的活動、已結束的活動、沒有結束時間的活動，以及開始時間在 14 天（`GO_LOOKAHEAD_DAYS`）之後的活動。
 
 #### Scenario: 太久以後的活動
 
@@ -27,8 +27,24 @@
 
 #### Scenario: 沒有結束時間的活動
 
-- **WHEN** 活動沒有結束時間且已開始
-- **THEN** 該活動 SHALL 保留
+- **WHEN** ScrapedDuck 的活動沒有結束時間（例如 `Dynamax Sneasel during Max Monday` 的 start 與 end 都是 null）
+- **THEN** 該活動 SHALL 不出現在 payload 的 `events`
+
+
+<!-- @trace
+source: fix-board-display
+updated: 2026-10-22
+code:
+  - .spectra.yaml
+  - scraper/sources/__init__.py
+  - gas/Styles.html
+  - scraper/sources/pchome.py
+  - scraper/main.py
+  - gas/App.html
+tests:
+  - tests/gas/app.test.js
+  - tests/test_scraper.py
+-->
 
 ---
 ### Requirement: 活動輸出欄位

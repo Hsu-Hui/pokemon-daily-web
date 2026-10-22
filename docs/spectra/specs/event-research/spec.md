@@ -46,3 +46,28 @@
 
 - **WHEN** 爬蟲輸出任務組
 - **THEN** 順序 SHALL 為巴哈任務組、LeekDuck 限時調查組、田野調查組
+
+---
+### Requirement: 略過領取獎勵
+
+限時調查步驟中英文為「Claim Reward!」的列 SHALL 不輸出為任務；巴哈或 LeekDuck 任務翻譯後文字為「領取獎勵」的 SHALL 一併略過。其餘任務的 `id` SHALL 不因此改變。
+
+#### Scenario: 步驟最後是領取獎勵
+
+- **WHEN** 某步驟有「Use a Star Piece」與「Claim Reward!」兩列
+- **THEN** 任務組 SHALL 只有「使用 1 個星星碎片」
+
+<!-- @trace
+source: fix-board-display
+updated: 2026-10-22
+code:
+  - .spectra.yaml
+  - scraper/sources/__init__.py
+  - gas/Styles.html
+  - scraper/sources/pchome.py
+  - scraper/main.py
+  - gas/App.html
+tests:
+  - tests/gas/app.test.js
+  - tests/test_scraper.py
+-->
