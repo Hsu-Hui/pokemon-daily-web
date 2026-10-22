@@ -202,8 +202,56 @@ function getData() {
     products: readRows_('products'),
     news: readRows_('news'),
     state: loadState_(),
+    favorites: listFavorites_(),
     config: BOARD,
   };
+}
+
+// ---------- 我的最愛 ----------
+
+const FAV_PREFIX = 'fav:';
+const FAV_MAX = 500;              // 每人最多收藏幾筆（UserProperties 總共 500 KB）
+const FAV_FIELD_MAX = 300;        // 每個欄位最多幾個字
+const FAV_FIELDS = ['kind', 'id', 'title', 'url', 'source', 'media', 'price', 'image', 'date'];
+
+/** 每筆收藏各存一個屬性：fav:<種類>:<id 的 SHA-1 前 16 碼>，內容是收藏當時的快照。 */
+function favKey_(kind, id) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_1, id, Utilities.Charset.UTF_8);
+  const hex = bytes.map((b) => ((b + 256) % 256).toString(16).padStart(2, '0')).join('');
+  return FAV_PREFIX + kind + ':' + hex.slice(0, 16);
+}
+
+function listFavorites_() {
+  const props = PropertiesService.getUserProperties().getProperties();
+  return Object.keys(props)
+    .filter((k) => k.indexOf(FAV_PREFIX) === 0)
+    .map((k) => JSON.parse(props[k]))
+    .sort((a, b) => String(b.starredAt).localeCompare(String(a.starredAt)));
+}
+
+/** 網頁呼叫：on 為 true 時收藏 item（存快照），false 時取消。回傳目前全部收藏。 */
+function toggleFavorite(item, on) {
+  const snap = {};
+  FAV_FIELDS.forEach((f) => { snap[f] = String((item && item[f]) || '').slice(0, FAV_FIELD_MAX); });
+  if (['news', 'product'].indexOf(snap.kind) < 0 || !snap.id || !snap.title || !/^https?:\/\//.test(snap.url)) {
+    throw new Error('bad favorite');
+  }
+  const lock = LockService.getUserLock();
+  lock.waitLock(10000);
+  try {
+    const props = PropertiesService.getUserProperties();
+    const key = favKey_(snap.kind, snap.id);
+    if (!on) {
+      props.deleteProperty(key);
+    } else if (!props.getProperty(key)) {
+      if (listFavorites_().length >= FAV_MAX) throw new Error('我的最愛已滿');
+      snap.starredAt = new Date().toISOString();
+      props.setProperty(key, JSON.stringify(snap));
+    }
+    return listFavorites_();
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /** 網頁呼叫：kind 是 taskDone / gaveUp，value 為 false 時取消。 */

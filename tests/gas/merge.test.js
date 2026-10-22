@@ -103,3 +103,41 @@ test('saveTasks rejects bad keys or values without writing', () => {
   assert.throws(() => gas.saveTasks({ 'no-hash': true, 'g1#b': true }), /bad change/);
   assert.deepStrictEqual(Object.keys(gas.loadState_().taskDone), ['g1#a']);
 });
+
+const newsItem = (id, title) => ({ kind: 'news', id, title, url: 'https://n/' + id, source: '寶可夢官網', date: '2026-10-21T01:00:00Z' });
+
+test('toggleFavorite adds a snapshot and removes it again', () => {
+  const { gas, userStores } = load();
+  let favs = gas.toggleFavorite(newsItem('n1', '寶可夢嘉年華'), true);
+  assert.deepStrictEqual(Array.from(favs, (f) => f.id), ['n1']);
+  assert.ok(favs[0].starredAt);
+  assert.strictEqual(Object.keys(userStores.me).filter((k) => k.startsWith('fav:news:')).length, 1);
+  favs = gas.toggleFavorite(newsItem('n1', '寶可夢嘉年華'), false);
+  assert.strictEqual(favs.length, 0);
+});
+
+test('toggleFavorite rejects bad items', () => {
+  const { gas } = load();
+  assert.throws(() => gas.toggleFavorite({ kind: 'event', id: 'x', title: 't', url: 'https://x' }, true), /bad favorite/);
+  assert.throws(() => gas.toggleFavorite({ kind: 'news', id: 'x', title: 't', url: 'javascript:alert(1)' }, true), /bad favorite/);
+  assert.throws(() => gas.toggleFavorite({ kind: 'news', id: '', title: 't', url: 'https://x' }, true), /bad favorite/);
+});
+
+test('long fields are trimmed and the 500 cap is enforced', () => {
+  const { gas } = load();
+  const [f] = gas.toggleFavorite(Object.assign(newsItem('long', 'x'.repeat(1000))), true);
+  assert.strictEqual(f.title.length, 300);
+  for (let i = 0; i < 499; i++) gas.toggleFavorite(newsItem('n' + i, 't'), true);
+  assert.throws(() => gas.toggleFavorite(newsItem('one-more', 't'), true), /我的最愛已滿/);
+  assert.strictEqual(gas.toggleFavorite(newsItem('n1', 't'), true).length, 500, 're-starring an existing one is fine');
+});
+
+test('favorites are per user and survive the news row being deleted', () => {
+  const stores = {};
+  const a = load({ userStores: stores });
+  a.gas.toggleFavorite(newsItem('n1', '寶可夢嘉年華'), true);
+  a.sheets.news = [];
+  assert.deepStrictEqual(Array.from(a.gas.getData().favorites, (f) => f.title), ['寶可夢嘉年華']);
+  a.gas.user = 'someone-else';
+  assert.strictEqual(a.gas.getData().favorites.length, 0);
+});

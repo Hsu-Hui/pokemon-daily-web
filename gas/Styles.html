@@ -83,6 +83,10 @@ select { font: inherit; font-size: 14px; min-height: 40px; padding: 0 12px; bord
   .task .body { flex-direction: column; align-items: flex-start; gap: 2px; }
   .task .reward { flex-basis: auto; margin-left: 0; text-align: left; }
   .group-head > .grow { flex-basis: 100%; }
+  /* 新聞：日期和星號縮小，標題多留一點寬度 */
+  .news-item { gap: 8px; padding: 12px; }
+  .news-item .date { min-width: 48px; padding: 4px 6px; }
+  .news-item .star { width: 34px; height: 34px; font-size: 17px; }
 }
 .task.checked .text { text-decoration: line-through; color: var(--muted); }
 .ghost { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--line); background: transparent; color: var(--muted); font-size: 13px; font-weight: 700; }
@@ -99,6 +103,13 @@ select { font: inherit; font-size: 14px; min-height: 40px; padding: 0 12px; bord
 .date b { font-size: 22px; font-weight: 900; line-height: 1.1; }
 .date span { font-size: 12px; color: var(--muted); }
 .link { color: inherit; text-decoration: none; }
+/* 我的最愛的星號：放在連結外面，按了不會打開連結 */
+.star { flex: none; width: 40px; height: 40px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--muted); font-size: 20px; line-height: 1; }
+.star[aria-pressed=true] { color: #E0A800; border-color: #E0A800; }
+.news-item { flex-wrap: nowrap; }
+.product-wrap { position: relative; display: flex; }
+.product-wrap > .product { flex: 1 1 auto; min-width: 0; }
+.product-wrap > .star { position: absolute; top: 8px; right: 8px; }
 .notice { padding: 10px 14px; border-radius: 12px; background: #FDEBD3; color: #7A4200; font-size: 14px; }
 /* 儲存列：固定在最上面 */
 .savebar { position: sticky; top: 0; z-index: 10; background: var(--surface); border-bottom: 1px solid var(--line); }

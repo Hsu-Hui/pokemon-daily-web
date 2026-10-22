@@ -35,7 +35,13 @@ function load(overrides = {}) {
       },
     },
     Logger: { log() {} },
-    Utilities: { formatDate: (d) => d.toISOString() },
+    Utilities: {
+      formatDate: (d) => d.toISOString(),
+      DigestAlgorithm: { SHA_1: 'sha1' },
+      Charset: { UTF_8: 'utf8' },
+      // Apps Script 回傳有號位元組（-128～127）
+      computeDigest: (alg, text) => [...require('crypto').createHash(alg).update(text, 'utf8').digest()].map((b) => (b > 127 ? b - 256 : b)),
+    },
   };
   vm.createContext(context);
   for (const file of ['Board.gs', 'Code.gs']) {

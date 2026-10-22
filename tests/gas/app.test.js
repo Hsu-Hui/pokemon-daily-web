@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { loadApp, sampleData } = require('./app');
 
-const TABS = ['overview', 'go', 'tasks', 'shop', 'tw', 'archive'];
+const TABS = ['overview', 'go', 'tasks', 'shop', 'tw', 'fav', 'archive'];
 
 test('every tab renders without undefined values', () => {
   const { app, main } = loadApp(sampleData());
@@ -186,4 +186,63 @@ test('overview lists unfinished task groups ending within 48 hours', () => {
   app.ui.tab = 'overview'; app.render();
   assert.match(main.innerHTML, /限時調查：adidas/);
   assert.ok(!main.innerHTML.includes('10 月田野調查'));
+});
+
+const clickStar = (listeners, kind, id) => listeners.click({ target: { closest: () => ({ disabled: false, dataset: { fav: kind, id } }) } });
+
+test('every news item and product card has a star outside its link', () => {
+  const { app, main } = loadApp(sampleData());
+  for (const tab of ['tw', 'shop', 'overview']) {
+    app.ui.tab = tab; app.render();
+    const links = main.innerHTML.match(/<a [^>]*>[\s\S]*?<\/a>/g) || [];
+    assert.ok(links.every((a) => !a.includes('class="star"')), tab + ': star inside a link');
+  }
+  app.ui.tab = 'tw'; app.render();
+  assert.strictEqual((main.innerHTML.match(/class="star"/g) || []).length, 1);
+  app.ui.tab = 'shop'; app.render();
+  assert.strictEqual((main.innerHTML.match(/class="star"/g) || []).length, 2);
+});
+
+test('starring a news item shows it on 我的最愛 and unstarring removes it', () => {
+  const data = sampleData();
+  const { app, main, listeners, calls } = loadApp(data);
+  clickStar(listeners, 'news', 'n1');
+  assert.strictEqual(calls.toggleFavorite[0][0].title, '寶可夢嘉年華');
+  app.ui.tab = 'tw'; app.render();
+  assert.match(main.innerHTML, /aria-pressed="true"[^>]*>★/);
+  app.ui.tab = 'fav'; app.render();
+  assert.match(main.innerHTML, /寶可夢嘉年華/);
+  clickStar(listeners, 'news', 'n1');
+  app.render();
+  assert.match(main.innerHTML, /還沒有收藏，按 ☆ 加入/);
+});
+
+test('failed star reverts', () => {
+  const { app, main, listeners, elements } = loadApp(sampleData(), { favFails: true });
+  clickStar(listeners, 'product', 'p1');
+  app.ui.tab = 'shop'; app.render();
+  assert.ok(!main.innerHTML.includes('★'));
+  assert.strictEqual(elements.toast.textContent, '儲存失敗，請再試一次');
+});
+
+test('我的最愛 keeps removed items, marks them 已下架, newest first', () => {
+  const data = sampleData();
+  data.favorites = [
+    { kind: 'product', id: 'gone-p', title: '已下架的玩偶', url: 'https://p', source: 'PChome', media: '', price: '$300', image: '', date: '2026-10-01T00:00:00Z', starredAt: '2026-10-20T00:00:00Z' },
+    { kind: 'news', id: 'old-n', title: '舊新聞', url: 'https://n', source: 'A 報', date: '2026-10-01T00:00:00Z', starredAt: '2026-10-02T00:00:00Z' },
+    { kind: 'news', id: 'n1', title: '寶可夢嘉年華', url: 'https://n1', source: '寶可夢官網', date: '2026-10-21T00:00:00Z', starredAt: '2026-10-21T00:00:00Z' },
+  ];
+  const { app, main } = loadApp(data);
+  app.ui.tab = 'fav'; app.render();
+  assert.match(main.innerHTML, /已下架的玩偶[\s\S]*\$300/);
+  assert.match(main.innerHTML, /舊新聞[^<]*<\/b><span[^>]*>A 報 · 已下架/);
+  assert.ok(main.innerHTML.indexOf('寶可夢嘉年華') < main.innerHTML.indexOf('舊新聞'), 'newest starred first');
+  assert.ok(!/寶可夢嘉年華<\/b><span[^>]*>[^<]*已下架/.test(main.innerHTML), 'item still on the board is not marked');
+});
+
+test('我的最愛 tab sits between 台灣活動 and 封存', () => {
+  const { app, elements } = loadApp(sampleData());
+  app.render();
+  const order = elements.tabs.innerHTML.match(/data-tab="(\w+)"/g).map((x) => x.slice(10, -1));
+  assert.deepStrictEqual(order.slice(4), ['tw', 'fav', 'archive']);
 });

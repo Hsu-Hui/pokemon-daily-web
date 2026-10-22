@@ -7,7 +7,7 @@ const vm = require('vm');
 const GAS = path.join(__dirname, '..', '..', 'gas');
 
 function loadApp(data, opts = {}) {
-  const calls = { saveTasks: [] };
+  const calls = { saveTasks: [], toggleFavorite: [] };
   const html = fs.readFileSync(path.join(GAS, 'App.html'), 'utf8');
   const code = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
   const elements = {};
@@ -20,6 +20,12 @@ function loadApp(data, opts = {}) {
     withFailureHandler(fn) { handlers.failure = fn; return runner; },
     getData() { handlers.success(data); },
     setFlag() {},
+    toggleFavorite(item, on) {
+      calls.toggleFavorite.push([item, on]);
+      if (opts.favFails) return handlers.failure(new Error('down'));
+      const rest = data.favorites.filter((f) => !(f.kind === item.kind && f.id === item.id));
+      handlers.success(on ? [Object.assign({ starredAt: new Date().toISOString() }, item)].concat(rest) : rest);
+    },
     saveTasks(changes) {
       calls.saveTasks.push(changes);
       if (opts.saveFails) return handlers.failure(new Error('down'));
@@ -59,6 +65,7 @@ function sampleData(overrides = {}) {
     ],
     news: [{ id: 'n1', kind: 'event', title: '寶可夢嘉年華', url: 'u', source: '寶可夢官網', others: ['A 報'], published: iso(-3), firstSeen: iso(-1) }],
     state: { taskDone: {}, gaveUp: {} },
+    favorites: [],
     config: board,
   }, overrides);
 }
