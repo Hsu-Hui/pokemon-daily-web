@@ -1,72 +1,72 @@
-## Context
+## 背景
 
-The project has two runtimes: a Python scraper on GitHub Actions and Google Apps Script (deployed by clasp from `gas/`). clasp 2.4.2 only uploads `.gs`, `.js`, `.html` files and `appsscript.json`, so Apps Script cannot read an arbitrary JSON file from the repo at runtime. Behaviour must stay the same except where the delta specs say otherwise.
+專案有兩個執行環境：GitHub Actions 上的 Python 爬蟲，以及 Google Apps Script（由 clasp 從 `gas/` 部署）。clasp 2.4.2 只會上傳 `.gs`、`.js`、`.html` 和 `appsscript.json`，所以 Apps Script 執行時讀不到 repo 裡任意的 JSON 檔。除了規格差異裡寫明的地方，行為都必須維持不變。
 
-## Goals / Non-Goals
+## 目標／不做的事
 
-**Goals:**
+**目標：**
 
-- One place to edit categories, reminder hours and retention days.
-- Smaller, single-purpose files in `scraper/sources/` and `gas/`.
-- Product announcements stored and shown as products, with no conversion in the page.
-- `doPost` always answers JSON.
-- Automated tests for `mergeTimed_` and `mergeFresh_`.
+- 分類、提醒時數和保留天數只在一個地方修改。
+- `scraper/sources/` 和 `gas/` 拆成小而單一用途的檔案。
+- 商品公告以商品的形式儲存和顯示，頁面不再轉換。
+- `doPost` 一律回 JSON。
+- `mergeTimed_` 和 `mergeFresh_` 有自動測試。
 
-**Non-Goals:**
+**不做的事：**
 
-- No new dashboard features (search, keyword categories and Discord notices are separate changes).
-- No change to task ids or task sources (handled by `fix-empty-task-list`).
-- No bundler or npm dependencies for Apps Script code.
-- No change to sheet names or the ingest payload's top-level keys.
+- 不加看板新功能（搜尋、關鍵字分類、Discord 通知是另外的 change）。
+- 不改任務 id 和任務來源（由 `fix-empty-task-list` 處理）。
+- Apps Script 程式不用打包工具或 npm 套件。
+- 不改分頁名稱，也不改每日資料最外層的欄位。
 
-## Decisions
+## 決策
 
-### Shared settings file with a generated Apps Script copy
+### 共用設定檔，加上產生的 Apps Script 版本
 
-`shared/board.json` holds `categories` (ordered list of `{name, keywords}`; keywords stay empty until `keyword-event-categories`), `remindHours`, `keepNewsDays`, `keepProductDays`, `keepArchiveDays`, `keepSeenDays`. `scripts/build_gas_config.py` writes `gas/Board.gs` as `const BOARD = <json>;` with a "generated, do not edit" header. `scripts/deploy_gas.sh` runs the generator before pushing, and `tests/test_scraper.py` asserts the committed `gas/Board.gs` equals the generator output. Alternative rejected: sending settings inside the daily payload — the page would show stale or missing settings until the next scrape, and reminders would depend on scraper runs.
+`shared/board.json` 放 `categories`（依序的 `{name, keywords}`；keywords 在 `keyword-event-categories` 之前先留空）、`remindHours`、`keepNewsDays`、`keepProductDays`、`keepArchiveDays`、`keepSeenDays`。`scripts/build_gas_config.py` 把它寫成 `gas/Board.gs` 的 `const BOARD = <json>;`，開頭註明「自動產生，不要直接改」。`scripts/deploy_gas.sh` 在上傳前重新產生，`tests/test_scraper.py` 檢查 commit 進去的 `gas/Board.gs` 和產生結果一致。放棄的做法：把設定放進每日資料傳給 Apps Script——下一次抓資料之前頁面會拿到舊的或沒有設定，提醒也會變成依賴爬蟲執行。
 
-### Split Index.html with include()
+### 用 include() 拆分 Index.html
 
-`Code.gs` gets `include(name)` returning `HtmlService.createHtmlOutputFromFile(name).getContent()`; `Index.html` keeps the skeleton and pulls `Styles` and `App` with `<?!= include('…') ?>`. `render()` becomes a `RENDERERS` map of per-tab functions (`renderOverview`, `renderGo`, `renderTasks`, `renderShop`, `renderTw`, `renderArchive`). Alternative rejected: separate pages per tab — would need several `google.script.run` loads.
+`Code.gs` 加上 `include(name)`，回傳 `HtmlService.createHtmlOutputFromFile(name).getContent()`；`Index.html` 只留骨架，用 `<?!= include('…') ?>` 接上 `Styles` 和 `App`。`render()` 改成 `RENDERERS` 對照表，每個分頁一個函式（`renderOverview`、`renderGo`、`renderTasks`、`renderShop`、`renderTw`、`renderArchive`）。放棄的做法：每個分頁各自一頁——要多次呼叫 `google.script.run` 載入資料。
 
-### Sources package with shared dates module
+### sources package 與共用的日期模組
 
-`scraper/sources/` contains `go.py`, `pchome.py`, `news.py` (Google News + dedupe), `official.py`, `bahamut.py`, `http.py` (`_get`) and `dates.py` (`parse_time`, `parse_date`, `mkdate`). `__init__.py` re-exports the public names and the private helpers tests use (`_clean_title`), so `from scraper import sources` keeps working.
+`scraper/sources/` 裡有 `go.py`、`pchome.py`、`news.py`（Google 新聞和去重）、`official.py`、`bahamut.py`、`http.py`（`_get`）和 `dates.py`（`parse_time`、`parse_date`、`mkdate`）。`__init__.py` 重新匯出公開名稱和測試用到的內部函式（`_clean_title`），所以 `from scraper import sources` 照樣可用。
 
-### Kind tagged before dedupe
+### 去重前先標好分類
 
-`News` gains `kind: str = "event"`. `build_news` sets each item's kind (official items via `news_kind`) before calling `dedupe_news`, which copies kept items with `dataclasses.replace` and never mutates its input. `known_titles` is removed with its test.
+`News` 加上 `kind: str = "event"`。`build_news` 在呼叫 `dedupe_news` 之前設定每則的分類（官網消息用 `news_kind`）；`dedupe_news` 用 `dataclasses.replace` 複製保留的項目，不修改輸入。`known_titles` 和它的測試一起拿掉。
 
-### Product announcements become products in the scraper
+### 商品公告在爬蟲端轉成商品
 
-After dedupe, `kind == "product"` news is converted by `news_to_product` into `Product(id, source="官網" if official else "寶可夢中心", name=title, url, price="", image="", media=<outlet>)` and appended to `products`; only `event` news stays in `news`. Products are serialised with `dataclasses.asdict`. The products sheet gains a `media` column. The page shows `看消息` when a product has no price. Old product-kind rows already in the 新聞 sheet still pass the page's `kind === 'event'` filter out and expire within 7 days.
+去重後，`kind == "product"` 的新聞由 `news_to_product` 轉成 `Product(id, source="官網" if 官網 else "寶可夢中心", name=標題, url, price="", image="", media=<媒體>)` 加進 `products`；`news` 只留 `event`。商品用 `dataclasses.asdict` 輸出。商品分頁加上 `media` 欄。沒有價格的商品頁面顯示「看消息」。新聞分頁裡舊的商品類資料會被頁面的 `kind === 'event'` 篩掉，7 天內自然過期。
 
-### doPost always returns JSON
+### doPost 一律回 JSON
 
-Parsing and the secret check move inside `try`; any exception returns `{ok:false, error:<message>}`. The script lock is taken only after the secret check.
+解析和密碼檢查都放進 `try`；任何例外都回 `{ok:false, error:<訊息>}`。通過密碼檢查後才取得 script lock。
 
-### Node tests for Apps Script pure functions
+### Apps Script 純函式的 Node 測試
 
-`tests/gas/merge.test.js` loads `gas/Board.gs` and `gas/Code.gs` into a `vm` context with stub globals and tests `mergeTimed_` and `mergeFresh_` with `node:test`. The daily workflow runs `node --test tests/gas` after the Python tests (Node 20 via `actions/setup-node`).
+`tests/gas/merge.test.js` 把 `gas/Board.gs` 和 `gas/Code.gs` 載入 `vm`，用假的全域物件，以 `node:test` 測 `mergeTimed_` 和 `mergeFresh_`。每日 workflow 在 Python 測試之後執行 `node --test tests/gas`（用 `actions/setup-node` 安裝 Node 20）。
 
-### Translation lookups in a data file
+### 翻譯對照表放進資料檔
 
-`scraper/data/translations.json` holds `months`, `meteors` and `places`. `PATTERNS` keeps only regex rules; places are applied after the patterns, which matches their current position at the end of `PATTERNS`.
+`scraper/data/translations.json` 放 `months`、`meteors` 和 `places`。`PATTERNS` 只留正規表示式規則；地名在規則之後套用，和原本放在 `PATTERNS` 最後面的效果相同。
 
-## Implementation Contract
+## 實作約定
 
-- Behaviour: the dashboard, the ingest response, reminders and the payload look the same as before, except (a) product announcements arrive in `payload.products` with `source` 官網/寶可夢中心, `price: ""` and a `media` field, (b) malformed POST bodies return `{ok:false,error}`, (c) `getData()` also returns `config` (the BOARD object).
-- Interface: `shared/board.json` keys listed above; `gas/Board.gs` defines global `BOARD`; `include(name)` in `Code.gs`; `scraper.sources` exposes the same names as before minus `dedupe_news(..., known_titles)`.
-- Failure modes: a stale `gas/Board.gs` fails `python -m unittest`; deploy regenerates it anyway.
-- Acceptance: `python -m unittest` and `node --test tests/gas` pass; `python -m scraper.main` without ingest settings writes `out/payload.json`; grep shows no hard-coded 4-hour or 7-day values or category list left in `gas/` or `scraper/translate.py` outside `Board.gs`/`board.json` readers.
-- Scope: in — the items in this design. Out — new features, task ids, task sources, sheet renames.
+- 行為：看板、接收資料的回應、提醒和每日資料都和原本一樣，除了：(a) 商品公告出現在 `payload.products`，`source` 為官網／寶可夢中心、`price: ""`，並有 `media` 欄位；(b) 格式錯誤的 POST 回 `{ok:false,error}`；(c) `getData()` 多回傳 `config`（BOARD 物件）。
+- 介面：上面列出的 `shared/board.json` 欄位；`gas/Board.gs` 定義全域 `BOARD`；`Code.gs` 的 `include(name)`；`scraper.sources` 對外名稱和原本相同，只少了 `dedupe_news(..., known_titles)`。
+- 失敗情況：`gas/Board.gs` 過期時 `python -m unittest` 失敗；部署時仍會重新產生。
+- 驗收：`python -m unittest` 和 `node --test tests/gas` 通過；沒設定接收資料時 `python -m scraper.main` 會寫出 `out/payload.json`；搜尋確認 `gas/` 和 `scraper/translate.py` 裡除了讀取 `Board.gs`／`board.json` 之外，沒有寫死的 4 小時、7 天或分類清單。
+- 範圍：包含本設計列出的項目；不包含新功能、任務 id、任務來源、分頁改名。
 
-## Risks / Trade-offs
+## 風險與取捨
 
-- [Generated file forgotten after editing board.json] → unit test fails and deploy regenerates.
-- [Apps Script `include` templates break the page] → manual check after deploy; the HTML is only re-arranged, not rewritten.
-- [Product rows change shape] → old rows age out in 7 days; the page tolerates a missing `media`.
+- [改了 board.json 忘記重新產生] → 單元測試失敗，部署時也會重新產生。
+- [Apps Script 的 include 樣板讓頁面壞掉] → 部署後手動檢查；HTML 只是重新排列，沒有改寫。
+- [商品資料格式改變] → 舊資料 7 天內過期；頁面可以處理沒有 `media` 的資料。
 
-## Migration Plan
+## 部署計畫
 
-Merge to main; the deploy workflow regenerates `Board.gs` and pushes. The next daily run writes the new product shape. Rollback: revert the merge commit; the deploy workflow pushes the previous code.
+合併到 main；部署 workflow 重新產生 `Board.gs` 並上傳。下一次每日執行會寫入新的商品格式。要退回的話：revert 合併的 commit，部署 workflow 會上傳舊的程式。

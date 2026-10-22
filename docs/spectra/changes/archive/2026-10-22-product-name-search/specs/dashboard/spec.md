@@ -1,20 +1,20 @@
 ## ADDED Requirements
 
-### Requirement: Product name search
+### Requirement: 商品名稱搜尋
 
 新商品頁 SHALL 提供搜尋框，只顯示名稱包含輸入文字的商品（不分大小寫，忽略前後空白），並與來源篩選、排序同時生效；分頁 SHALL 只計算符合的商品，搜尋文字改變時 SHALL 回到第 1 頁。重畫列表時搜尋框 SHALL 保持焦點與游標位置。沒有符合的商品時 SHALL 顯示「找不到符合「<文字>」的商品」；清空搜尋框時 SHALL 顯示全部商品。
 
-#### Scenario: Search with source filter
+#### Scenario: 搭配來源篩選搜尋
 
 - **WHEN** 使用者選了來源「PChome」並輸入「pikachu」
 - **THEN** 列表 SHALL 只顯示來源為 PChome 且名稱含 Pikachu（不分大小寫）的商品，並在第 1 頁
 
-#### Scenario: No match
+#### Scenario: 找不到符合的商品
 
 - **WHEN** 使用者輸入「不存在的商品」
 - **THEN** 頁面 SHALL 顯示「找不到符合「不存在的商品」的商品」
 
-##### Example: Matching
+##### Example: 搜尋比對
 
 | 商品名稱 | 搜尋文字 | 顯示 |
 | -------- | -------- | ---- |

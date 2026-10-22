@@ -1,48 +1,48 @@
 ## MODIFIED Requirements
 
-### Requirement: Task line extraction
+### Requirement: 擷取任務行
 
 系統 SHALL 把文章內文逐行處理：去掉條列符號後，長度不超過 80 字、含任務動詞（捕捉、轉動、孵化、使用、完成…）的行當作任務；箭頭（→、->、➔ 等）或「獎勵：」之後是獎勵。沒有獎勵也沒有數字的行、以及以「。」或「！」結尾的句子 SHALL 視為說明文字略過。每篇最多 40 項。每個任務 SHALL 有以任務文字雜湊產生的 `id`。
 
-#### Scenario: Task with arrow reward
+#### Scenario: 用箭頭寫獎勵
 
 - **WHEN** 內文有一行「・捕捉 5 隻寶可夢 → 星塵 x500」
 - **THEN** 系統 SHALL 擷取任務「捕捉 5 隻寶可夢」與獎勵「星塵 x500」
 
-#### Scenario: Missing reward
+#### Scenario: 沒有獎勵
 
 - **WHEN** 任務行有數字但沒有獎勵分隔符號
 - **THEN** 任務 SHALL 保留，獎勵為空字串（看板顯示「見原文」）
 
-#### Scenario: Announcement sentence
+#### Scenario: 公告句子
 
 - **WHEN** 內文有一行「購買「GO Pass豪華版」則可額外獲得10顆高級球作為獎勵。」
 - **THEN** 該行 SHALL 不被當成任務
 
-### Requirement: Period parsing
+### Requirement: 期間解析
 
 系統 SHALL 從內文解析期間。含年份的寫法（「2026年11月9日10:00～2026年11月13日20:00」，結束可省略年份，年月日也可用 `/` 分隔）SHALL 優先採用且直接使用其中的年份。否則解析第一個「月/日 [時:分] ~ [月/日] [時:分]」；沒有開始時間時為 00:00、沒有結束時間時為 23:59，只有結束時刻時沿用開始日期，年份以文章編輯時間為準；日期早於發文時間 180 天以上時 SHALL 視為隔年，結束早於開始時 SHALL 把結束改到隔年。
 
-#### Scenario: Cross-year period
+#### Scenario: 跨年期間
 
 - **WHEN** 12 月的文章寫「12/30 ~ 1/5」
 - **THEN** 結束時間 SHALL 為隔年 1 月 5 日 23:59
 
-#### Scenario: Full date with year
+#### Scenario: 含年份的日期
 
 - **WHEN** 內文寫「台灣時間2026年11月9日10:00～2026年11月13日20:00」
 - **THEN** 期間 SHALL 為 2026-11-09 10:00 到 2026-11-13 20:00
 
-### Requirement: Post acceptance
+### Requirement: 文章採用條件
 
 系統 SHALL 只輸出有任務且有結束時間、且尚未結束的文章，任務組 id 為 `bh-<snA>`，名稱為去掉開頭【…】的文章標題，`url` 為文章網址。單篇文章讀取失敗 SHALL 只略過該篇。
 
-#### Scenario: Pinned summary post
+#### Scenario: 置頂整理文
 
 - **WHEN** 文章有任務行但沒有可解析的期間
 - **THEN** 該文章 SHALL 不輸出任務組
 
-#### Scenario: Bahamut task ids
+#### Scenario: 巴哈任務 id
 
 - **WHEN** 巴哈任務組輸出
 - **THEN** 每個任務 SHALL 有 `id`、`text` 與 `reward`，同一段任務文字隔天的 `id` SHALL 相同
