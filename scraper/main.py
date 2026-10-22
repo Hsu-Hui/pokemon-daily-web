@@ -144,15 +144,6 @@ def build_news(groups: list[tuple[str, list[sources.News]]]) -> list[dict]:
     } for n in sources.dedupe_news(tagged)]
 
 
-def news_to_product(n: dict) -> dict:
-    """商品類的消息放到新商品頁：官網公告標成「官網」，其他是寶可夢中心的新聞。"""
-    official = n["source"] == "寶可夢官網"
-    return asdict(sources.Product(
-        id=n["id"], source="官網" if official else "寶可夢中心", name=n["title"], url=n["url"],
-        media="" if official else n["source"],
-    ))
-
-
 def collect(now: datetime) -> dict:
     errors: list[str] = []
 
@@ -179,8 +170,8 @@ def collect(now: datetime) -> dict:
         "generatedAt": now.isoformat(),
         "events": build_events(events, now),
         "taskGroups": build_tasks(tasks) + build_event_research(event_research) + build_field_research(research, events, now),
-        "products": [asdict(p) for p in products] + [news_to_product(n) for n in news if n["kind"] == "product"],
-        "news": [n for n in news if n["kind"] == "event"],
+        "products": [asdict(p) for p in products],
+        "news": news,
         "errors": errors,
     }
 

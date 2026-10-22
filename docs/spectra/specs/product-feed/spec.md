@@ -36,16 +36,6 @@
 - **THEN** `price` SHALL 為空字串
 
 ---
-### Requirement: 商品消息轉成商品
-
-`kind` 為 `product` 的新聞 SHALL 轉成商品：`id` 沿用新聞 id，`source` 在官網消息時為「官網」、其他為「寶可夢中心」，`name` 為新聞標題，`url` 為新聞網址，`price` 與 `image` 為空字串，`media` 為新聞來源（媒體名稱）。PChome 商品的 `media` SHALL 為空字串。所有商品 SHALL 以相同欄位輸出。
-
-#### Scenario: 寶可夢中心新聞
-
-- **WHEN** 寶可夢中心新聞「寶可夢中心台北聖誕新品」由「上報」報導
-- **THEN** payload 的 `products` SHALL 包含 `source` 為「寶可夢中心」、`name` 為該標題、`price` 為空字串、`media` 為「上報」的商品
-
----
 ### Requirement: 移除重複商品
 
 商品 SHALL 以「名稱（去掉多餘空白、不分大小寫）＋價格」為鍵去重，只保留第一筆（最新上架）。看板顯示時 SHALL 用同一個鍵再去重一次，讓試算表裡已存的重複商品不再顯示。

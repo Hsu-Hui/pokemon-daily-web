@@ -28,7 +28,7 @@ Apps Script 提供的看板網頁，顯示活動、任務、新商品、台灣�
 ---
 ### Requirement: 分頁
 
-看板 SHALL 有七個分頁：總覽、GO 活動、任務待辦、新商品、台灣活動、我的最愛、封存；目前分頁 SHALL 記在瀏覽器 localStorage，下次開啟沿用。
+看板 SHALL 有七個分頁：總覽、GO 活動、任務待辦、新商品、活動&新聞、我的最愛、封存；目前分頁 SHALL 記在瀏覽器 localStorage，下次開啟沿用。
 
 #### Scenario: 總覽內容
 
@@ -43,30 +43,19 @@ Apps Script 提供的看板網頁，顯示活動、任務、新商品、台灣�
 #### Scenario: 我的最愛分頁位置
 
 - **WHEN** 使用者打開看板
-- **THEN** 「我的最愛」SHALL 位在「台灣活動」與「封存」之間
+- **THEN** 「我的最愛」SHALL 位在「活動&新聞」與「封存」之間
 
 
 <!-- @trace
-source: add-favorites
-updated: 2026-10-22
+source: news-tab-sources
+updated: 2026-10-23
 code:
-  - gas/Index.html
-  - scraper/sources/__init__.py
   - README.md
-  - scraper/main.py
   - gas/App.html
-  - tests/gas/app.js
-  - scraper/sources/pchome.py
-  - tests/gas/load.js
-  - gas/Code.gs
-  - .spectra.yaml
-  - gas/Board.gs
-  - shared/board.json
-  - gas/Styles.html
+  - scraper/main.py
 tests:
-  - tests/test_scraper.py
   - tests/gas/app.test.js
-  - tests/gas/merge.test.js
+  - tests/test_scraper.py
 -->
 
 ---
@@ -118,27 +107,30 @@ tests:
 ---
 ### Requirement: 新商品頁
 
-新商品頁 SHALL 顯示 payload 的商品（PChome、寶可夢中心、官網，欄位相同，不在頁面上轉換新聞），沒有價格的商品 SHALL 顯示「看消息」，有 `media` 時來源顯示為「來源 · 媒體」。頁面提供 PChome/寶可夢中心/官網的多選來源篩選與排序（上架時間新到舊（預設）、舊到新、價格高到低、低到高；沒有價格的排最後）。首次出現未滿 24 小時的商品 SHALL 標示 NEW。
+新商品頁 SHALL 只顯示 PChome 商品；試算表裡來源不是 PChome 的舊商品列（寶可夢中心新聞、官網公告）SHALL 不顯示在新商品頁。頁面提供排序（上架時間新到舊（預設）、舊到新、價格高到低、低到高；沒有價格的排最後），沒有價格的商品 SHALL 顯示「看消息」，不提供來源篩選按鈕。首次出現未滿 24 小時的商品 SHALL 標示 NEW。
 
 #### Scenario: 依價格排序
 
 - **WHEN** 使用者選「價格：低到高」
 - **THEN** 有價格的商品 SHALL 由低到高排列，沒有價格的排在最後
 
-#### Scenario: 沒有價格的公告
+#### Scenario: 寶可夢中心新聞不在新商品
 
-- **WHEN** 商品來源為「官網」且沒有價格
-- **THEN** 價格位置 SHALL 顯示「看消息」
+- **WHEN** 試算表商品分頁裡有來源為「寶可夢中心」的舊資料
+- **THEN** 新商品頁 SHALL 不顯示它，它 SHALL 出現在活動&新聞
 
----
-### Requirement: 台灣活動頁
 
-台灣活動頁 SHALL 列出 `kind` 為 `event` 的新聞，依發布時間（沒有時用 `firstSeen`）新到舊排序，並顯示「另有 N 家報導」。
-
-#### Scenario: 合併的報導
-
-- **WHEN** 一則新聞的 `others` 有 2 家媒體
-- **THEN** 該則 SHALL 顯示「另有 2 家報導」
+<!-- @trace
+source: news-tab-sources
+updated: 2026-10-23
+code:
+  - README.md
+  - gas/App.html
+  - scraper/main.py
+tests:
+  - tests/gas/app.test.js
+  - tests/test_scraper.py
+-->
 
 ---
 ### Requirement: 封存頁
@@ -199,12 +191,12 @@ GO 活動、任務待辦、新商品、台灣活動、封存的列表 SHALL 每�
 ---
 ### Requirement: 商品名稱搜尋
 
-新商品頁 SHALL 提供搜尋框，只顯示名稱包含輸入文字的商品（不分大小寫，忽略前後空白），並與來源篩選、排序同時生效；分頁 SHALL 只計算符合的商品，搜尋文字改變時 SHALL 回到第 1 頁。重畫列表時搜尋框 SHALL 保持焦點與游標位置。沒有符合的商品時 SHALL 顯示「找不到符合「<文字>」的商品」；清空搜尋框時 SHALL 顯示全部商品。
+新商品頁 SHALL 提供搜尋框，只顯示名稱包含輸入文字的商品（不分大小寫，忽略前後空白），並與排序同時生效；分頁 SHALL 只計算符合的商品，搜尋文字改變時 SHALL 回到第 1 頁。重畫列表時搜尋框 SHALL 保持焦點與游標位置。沒有符合的商品時 SHALL 顯示「找不到符合「<文字>」的商品」；清空搜尋框時 SHALL 顯示全部商品。
 
-#### Scenario: 搭配來源篩選搜尋
+#### Scenario: 搜尋商品
 
-- **WHEN** 使用者選了來源「PChome」並輸入「pikachu」
-- **THEN** 列表 SHALL 只顯示來源為 PChome 且名稱含 Pikachu（不分大小寫）的商品，並在第 1 頁
+- **WHEN** 使用者輸入「pikachu」
+- **THEN** 列表 SHALL 只顯示名稱含 Pikachu（不分大小寫）的商品，並在第 1 頁
 
 #### Scenario: 找不到符合的商品
 
@@ -219,6 +211,19 @@ GO 活動、任務待辦、新商品、台灣活動、封存的列表 SHALL 每�
 | POKEMON 卡牌 禮盒 | pokemon | 是 |
 | 寶可夢 伊布 馬克杯 | 皮卡丘 | 否 |
 | 寶可夢 伊布 馬克杯 | "  伊布 " | 是 |
+
+
+<!-- @trace
+source: news-tab-sources
+updated: 2026-10-23
+code:
+  - README.md
+  - gas/App.html
+  - scraper/main.py
+tests:
+  - tests/gas/app.test.js
+  - tests/test_scraper.py
+-->
 
 ---
 ### Requirement: 排版不擠壓
@@ -258,7 +263,7 @@ tests:
 ---
 ### Requirement: 儲存列
 
-頁面頂端 SHALL 有固定的儲存列，顯示「有 N 項變更未儲存」與「儲存」按鈕；沒有變更時按鈕 SHALL 停用並顯示「已儲存」。任務勾選 SHALL 先存在頁面的草稿，按「儲存」才送出；切換分頁 SHALL 保留草稿；有未儲存變更時離開或重新整理頁面 SHALL 跳出瀏覽器確認。「放棄」「復原」SHALL 立即儲存，不經過草稿。
+「任務待辦」分頁頂端 SHALL 有固定的儲存列，顯示「有 N 項變更未儲存」與「儲存」按鈕；沒有變更時按鈕 SHALL 停用並顯示「已儲存」。其他分頁 SHALL 不顯示儲存列。任務勾選 SHALL 先存在頁面的草稿，按「儲存」才送出；切換分頁 SHALL 保留草稿；有未儲存變更時離開或重新整理頁面 SHALL 跳出瀏覽器確認。「放棄」「復原」SHALL 立即儲存，不經過草稿。
 
 #### Scenario: 勾選後儲存
 
@@ -275,25 +280,56 @@ tests:
 - **WHEN** 有未儲存的勾選時重新整理頁面
 - **THEN** 瀏覽器 SHALL 先詢問是否離開
 
+#### Scenario: 其他分頁沒有儲存列
+
+- **WHEN** 使用者在任務待辦勾了任務後切到 GO 活動
+- **THEN** GO 活動頁 SHALL 不顯示儲存列，回到任務待辦時草稿與儲存列 SHALL 還在
+
+
 <!-- @trace
-source: task-progress-save
-updated: 2026-10-22
+source: news-tab-sources
+updated: 2026-10-23
 code:
-  - .spectra.yaml
-  - gas/Index.html
-  - shared/board.json
-  - tests/gas/app.js
-  - gas/Styles.html
-  - scraper/sources/pchome.py
-  - gas/Board.gs
-  - gas/App.html
-  - scraper/sources/__init__.py
-  - gas/Code.gs
-  - tests/gas/load.js
   - README.md
+  - gas/App.html
   - scraper/main.py
 tests:
-  - tests/test_scraper.py
-  - tests/gas/merge.test.js
   - tests/gas/app.test.js
+  - tests/test_scraper.py
+-->
+
+---
+### Requirement: 活動&新聞頁
+
+活動&新聞頁 SHALL 列出所有消息，依發布時間（沒有時用 `firstSeen`）新到舊排序，並顯示「另有 N 家報導」。頁面 SHALL 提供可多選的來源篩選（「全部」代表不篩選，並顯示每類數量）：「官方」為來源是寶可夢官網的消息；「新聞」為其他媒體中 `kind` 為 `product` 的報導（例如寶可夢中心新品）；「活動」為其他媒體中 `kind` 為 `event` 的報導。試算表商品分頁裡來源為「官網」或「寶可夢中心」的舊資料 SHALL 也顯示在這一頁（官網為「官方」，寶可夢中心為「新聞」）。改變篩選時 SHALL 回到第 1 頁。
+
+#### Scenario: 合併的報導
+
+- **WHEN** 一則新聞的 `others` 有 2 家媒體
+- **THEN** 該則 SHALL 顯示「另有 2 家報導」
+
+#### Scenario: 只看官方
+
+- **WHEN** 使用者選了「官方」
+- **THEN** 列表 SHALL 只顯示來源為寶可夢官網的消息
+
+##### Example: 來源分類
+
+| 來源 | kind | 分類 |
+| ---- | ---- | ---- |
+| 寶可夢官網 | event | 官方 |
+| 寶可夢官網 | product | 官方 |
+| 上報（寶可夢中心新品） | product | 新聞 |
+| 自由時報（台灣活動） | event | 活動 |
+
+<!-- @trace
+source: news-tab-sources
+updated: 2026-10-23
+code:
+  - README.md
+  - gas/App.html
+  - scraper/main.py
+tests:
+  - tests/gas/app.test.js
+  - tests/test_scraper.py
 -->

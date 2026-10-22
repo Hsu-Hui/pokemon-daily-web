@@ -8,11 +8,11 @@
 
 ### Requirement: 星號按鈕
 
-台灣活動的每則新聞、新商品頁與總覽「今天新上架」的每件商品 SHALL 有星號按鈕：未收藏顯示 ☆，已收藏顯示 ★。按下 SHALL 立即加入或移除我的最愛（不經過任務的「儲存」），且 SHALL 不開啟該新聞或商品的連結。
+活動&新聞的每則消息、新商品頁與總覽「今天新上架」的每件商品 SHALL 有星號按鈕：未收藏顯示 ☆，已收藏顯示 ★。按下 SHALL 立即加入或移除我的最愛（不經過任務的「儲存」），且 SHALL 不開啟該新聞或商品的連結。
 
 #### Scenario: 收藏一則新聞
 
-- **WHEN** 使用者在台灣活動按某則新聞的 ☆
+- **WHEN** 使用者在活動&新聞按某則新聞的 ☆
 - **THEN** 星號 SHALL 變成 ★，該新聞 SHALL 出現在我的最愛
 
 #### Scenario: 收藏失敗
@@ -22,26 +22,15 @@
 
 
 <!-- @trace
-source: add-favorites
-updated: 2026-10-22
+source: news-tab-sources
+updated: 2026-10-23
 code:
-  - gas/Index.html
-  - scraper/sources/__init__.py
   - README.md
-  - scraper/main.py
   - gas/App.html
-  - tests/gas/app.js
-  - scraper/sources/pchome.py
-  - tests/gas/load.js
-  - gas/Code.gs
-  - .spectra.yaml
-  - gas/Board.gs
-  - shared/board.json
-  - gas/Styles.html
+  - scraper/main.py
 tests:
-  - tests/test_scraper.py
   - tests/gas/app.test.js
-  - tests/gas/merge.test.js
+  - tests/test_scraper.py
 -->
 
 ---
@@ -86,7 +75,7 @@ tests:
 ---
 ### Requirement: 我的最愛頁
 
-看板 SHALL 有「我的最愛」分頁，分成「台灣活動」與「商品」兩區，各依收藏時間新到舊排列並每頁最多 25 筆；每筆有 ★ 可取消收藏；已不在目前列表中的項目 SHALL 標示「已下架」。沒有收藏時 SHALL 顯示「還沒有收藏，按 ☆ 加入」。
+看板 SHALL 有「我的最愛」分頁，分成「活動&新聞」與「商品」兩區，各依收藏時間新到舊排列並每頁最多 25 筆；每筆有 ★ 可取消收藏；已不在目前列表中的項目 SHALL 標示「已下架」。沒有收藏時 SHALL 顯示「還沒有收藏，按 ☆ 加入」。
 
 #### Scenario: 從我的最愛取消收藏
 
@@ -94,24 +83,13 @@ tests:
 - **THEN** 該商品 SHALL 從我的最愛移除，新商品頁的星號 SHALL 變回 ☆
 
 <!-- @trace
-source: add-favorites
-updated: 2026-10-22
+source: news-tab-sources
+updated: 2026-10-23
 code:
-  - gas/Index.html
-  - scraper/sources/__init__.py
   - README.md
-  - scraper/main.py
   - gas/App.html
-  - tests/gas/app.js
-  - scraper/sources/pchome.py
-  - tests/gas/load.js
-  - gas/Code.gs
-  - .spectra.yaml
-  - gas/Board.gs
-  - shared/board.json
-  - gas/Styles.html
+  - scraper/main.py
 tests:
-  - tests/test_scraper.py
   - tests/gas/app.test.js
-  - tests/gas/merge.test.js
+  - tests/test_scraper.py
 -->
