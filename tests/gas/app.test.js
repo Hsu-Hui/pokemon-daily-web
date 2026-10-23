@@ -388,3 +388,43 @@ test('calendar shows a hint when nothing falls in the range', () => {
   app.ui.tab = 'go'; app.ui.calWeek = 5; app.render();
   assert.match(main.innerHTML, /這段期間沒有活動/);
 });
+
+// ---------- 已完成的任務組 ----------
+
+function doneData() {
+  const data = sampleData();
+  const iso = (h) => new Date(Date.now() + h * 36e5).toISOString();
+  data.tasks = [
+    { id: 'ld-done', name: '限時調查：已做完', url: 'u', start: iso(-24), end: iso(2), firstSeen: iso(-1),
+      tasks: [{ id: 'a', text: '捕捉 1 隻', reward: '' }, { id: 'b', text: '捕捉 2 隻', reward: '' }] },
+    { id: 'ld-todo', name: '限時調查：還沒做', url: 'u', start: iso(-24), end: iso(48), firstSeen: iso(-1),
+      tasks: [{ id: 'c', text: '孵化 1 顆蛋', reward: '' }] },
+  ];
+  data.state.taskDone = { 'ld-done#a': true, 'ld-done#b': true };
+  return data;
+}
+
+test('saved-done task groups go last, folded, and can be opened', () => {
+  const { app, main, listeners } = loadApp(doneData());
+  app.ui.tab = 'tasks'; app.render();
+  const html = main.innerHTML;
+  assert.ok(html.indexOf('還沒做') < html.indexOf('已完成 1 組') && html.indexOf('已完成 1 組') < html.indexOf('已做完'), 'done group is last');
+  assert.ok(!html.includes('捕捉 1 隻'), 'folded group hides its tasks');
+  assert.match(html, /data-taskopen="ld-done"[^>]*>展開/);
+  click(listeners, { taskopen: 'ld-done' });
+  assert.match(main.innerHTML, /捕捉 1 隻/);
+  assert.match(main.innerHTML, /data-taskopen="ld-done"[^>]*>收合/);
+  click(listeners, { taskopen: 'ld-done' });
+  assert.ok(!main.innerHTML.includes('捕捉 1 隻'));
+});
+
+test('a group ticked to done stays in place until saved', () => {
+  const data = doneData();
+  data.state.taskDone = {};
+  const { app, main } = loadApp(data);
+  app.ui.tab = 'tasks'; app.render();
+  app.toggleTask('ld-done', 1, true);
+  const html = main.innerHTML;
+  assert.ok(html.indexOf('已做完') < html.indexOf('還沒做'), 'not moved before saving');
+  assert.ok(!html.includes('已完成 1 組') && html.includes('捕捉 1 隻'));
+});

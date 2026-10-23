@@ -14,7 +14,7 @@ const PAGE_SIZE = 25;
 // goCats、feeds 是多選，空陣列代表「全部」；goSort.key 為 null 時用預設排序（類型 → 開始 → 結束）
 // draft：任務勾選的草稿（key → true/false），按「儲存」才送出；saving：儲存中
 // calWeek：行事曆從本週往後移幾週；calOpen：行事曆是否展開
-const ui = { draft: {}, saving: false, tab: 'overview', goCats: [], feeds: [], goSort: { key: null, dir: 1 }, shopSort: 'new', shopQuery: '', page: {}, calWeek: 0, calOpen: true };
+const ui = { draft: {}, saving: false, tab: 'overview', goCats: [], feeds: [], goSort: { key: null, dir: 1 }, shopSort: 'new', shopQuery: '', page: {}, calWeek: 0, calOpen: true, taskOpen: {} };
 let data = null;
 try { ui.tab = localStorage.getItem('tab') || 'overview'; } catch (e) {}
 try { ui.calOpen = localStorage.getItem('calOpen') !== '0'; } catch (e) {}
@@ -170,7 +170,7 @@ function derive() {
     });
     const n = items.filter((t) => t.done).length;
     return Object.assign({}, g, {
-      items, n, allDone: n === items.length, gaveUp: !!s.gaveUp[g.id], ended: left <= 0, left,
+      items, n, allDone: n === items.length, savedAllDone: items.every((t) => savedDone(t.key)), gaveUp: !!s.gaveUp[g.id], ended: left <= 0, left,
       soon: left > 0 && left < REMIND_MS && n < items.length,
     });
   }).sort((a, b) => a.left - b.left);
@@ -181,7 +181,8 @@ function derive() {
   return {
     activeEvents: events.filter((e) => !e.ended),
     endedEvents: events.filter((e) => e.ended),
-    activeTasks: tasks.filter((g) => !g.gaveUp && !g.ended),
+    // 已儲存為全部完成的任務組排到最後（勾完還沒按儲存時先留在原位）
+    activeTasks: tasks.filter((g) => !g.gaveUp && !g.ended).sort((a, b) => a.savedAllDone - b.savedAllDone),
     archivedTasks: tasks.filter((g) => g.gaveUp || g.ended),
     products, twNews,
     isNew: (p) => p.firstSeen && now - new Date(p.firstSeen).getTime() < 24 * HOUR,
@@ -385,6 +386,21 @@ function calendarHtml(events) {
 
 function taskGroupHtml(g) {
   const pct = Math.round(g.n / g.items.length * 100);
+  // 已完成的任務組預設收合，只留標題列
+  const folded = g.savedAllDone && !ui.taskOpen[g.id];
+  const foldButton = g.savedAllDone
+    ? `<button type="button" class="ghost" data-taskopen="${esc(g.id)}" aria-expanded="${!folded}">${folded ? '展開' : '收合'}</button>` : '';
+  if (folded) {
+    return `
+    <div class="card pad row group-head done-group">
+      <div class="grow stack" style="gap:0">
+        <a class="link" href="${esc(g.url)}" target="_blank" rel="noopener"><b style="font-size:16px">${esc(g.name)}</b></a>
+        <span class="muted" style="font-size:13px">${when(g.end)} 結束 · ${g.items.length} 項全部完成</span>
+      </div>
+      <b style="font-size:14px;color:var(--blue)">全部完成</b>
+      ${foldButton}
+    </div>`;
+  }
   return `
     <div class="card pad stack" style="gap:10px">
       <div class="row group-head">
@@ -393,7 +409,7 @@ function taskGroupHtml(g) {
           <span class="muted" style="font-size:13px">${when(g.start)} 開始 → ${when(g.end)} 結束${g.end ? ` · <b class="${g.soon ? 'soon' : ''}">剩 ${leftText(g.left)}</b>` : ''}</span>
         </div>
         <b style="font-size:14px;color:var(--blue)">${g.allDone ? '全部完成' : `${g.n}/${g.items.length} 完成`}</b>
-        <button type="button" class="ghost" data-flag="gaveUp" data-id="${esc(g.id)}" data-value="1">放棄</button>
+        ${foldButton || `<button type="button" class="ghost" data-flag="gaveUp" data-id="${esc(g.id)}" data-value="1">放棄</button>`}
       </div>
       <div class="bar"><div style="width:${pct}%"></div></div>
       ${g.items.map((t) => `
@@ -485,7 +501,7 @@ function renderTasks(d) {
   const { items, pager } = paginate(d.activeTasks, 'tasks');
   return `
     <div class="head"><h2>任務待辦</h2><span class="muted">田野調查和活動限時調查來自 LeekDuck，另外會讀巴哈姆特 Pokémon GO 哈啦板的情報；結束前 ${REMIND_MS / HOUR} 小時還沒完成會發 Discord 提醒</span></div>
-    ${(items.map(taskGroupHtml).join('') || '<p class="muted">目前沒有任務</p>') + pager}`;
+    ${(items.map((g, i) => (g.savedAllDone && !(items[i - 1] || {}).savedAllDone ? `<h3 class="muted" style="margin-top:8px">已完成 ${d.activeTasks.filter((x) => x.savedAllDone).length} 組</h3>` : '') + taskGroupHtml(g)).join('') || '<p class="muted">目前沒有任務</p>') + pager}`;
 }
 
 function renderShop(d) {
@@ -573,12 +589,13 @@ function render() {
 // ---------- 事件 ----------
 
 document.addEventListener('click', (ev) => {
-  const t = ev.target.closest('[data-tab],[data-gocat],[data-calmove],[data-caltoggle],[data-feed],[data-sort],[data-page],button[data-flag],button[data-save],button[data-fav]');
+  const t = ev.target.closest('[data-tab],[data-taskopen],[data-gocat],[data-calmove],[data-caltoggle],[data-feed],[data-sort],[data-page],button[data-flag],button[data-save],button[data-fav]');
   if (!t || t.disabled) return;
   const ds = t.dataset;
   if ('save' in ds) { saveDraft(); return; }
   if (ds.fav) { toggleFav(ds.fav, ds.id); return; }
   if (ds.tab) { ui.tab = ds.tab; try { localStorage.setItem('tab', ui.tab); } catch (e) {} window.scrollTo(0, 0); }
+  else if (ds.taskopen) { ui.taskOpen[ds.taskopen] = !ui.taskOpen[ds.taskopen]; }
   else if (ds.calmove) { ui.calWeek = +ds.calmove ? ui.calWeek + +ds.calmove : 0; }
   else if (ds.caltoggle) { ui.calOpen = !ui.calOpen; try { localStorage.setItem('calOpen', ui.calOpen ? '1' : '0'); } catch (e) {} }
   else if (ds.gocat) { ui.goCats = toggleIn(ui.goCats, ds.gocat); ui.page.go = 1; }
