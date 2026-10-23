@@ -428,3 +428,51 @@ test('a group ticked to done stays in place until saved', () => {
   assert.ok(html.indexOf('已做完') < html.indexOf('還沒做'), 'not moved before saving');
   assert.ok(!html.includes('已完成 1 組') && html.includes('捕捉 1 隻'));
 });
+
+// ---------- 手動新增任務組 ----------
+
+test('parseManualLines follows the arrow examples', () => {
+  const { app } = loadApp(sampleData());
+  const got = app.parseManualLines('捕捉 30 隻寶可夢 → 精靈球 ×10\n\n  轉動 5 個補給站  \n孵化 1 顆蛋 -> 星星沙 ×500\n使用 3 個莓果=>經驗值');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(got)), [
+    { text: '捕捉 30 隻寶可夢', reward: '精靈球 ×10' },
+    { text: '轉動 5 個補給站', reward: '' },
+    { text: '孵化 1 顆蛋', reward: '星星沙 ×500' },
+    { text: '使用 3 個莓果', reward: '經驗值' },
+  ]);
+});
+
+test('manual task form adds a group that checks in order and can be deleted', () => {
+  const data = sampleData();
+  const { app, main, listeners, calls } = loadApp(data);
+  app.ui.tab = 'tasks'; app.render();
+  click(listeners, { mfopen: '1' });
+  assert.match(main.innerHTML, /新增任務組[\s\S]*data-mf="name"/);
+  const type = (field, value) => listeners.input({ target: { value, dataset: { mf: field }, matches: (sel) => sel === '[data-mf]' } });
+  const end = new Date(Date.now() + 3 * 864e5);
+  type('name', '限時調查：30 年的軌跡');
+  type('end', new Date(end.getTime() - end.getTimezoneOffset() * 6e4).toISOString().slice(0, 16));
+  type('lines', '捕捉 30 隻寶可夢 → 精靈球 ×10\n轉動 5 個補給站');
+  click(listeners, { mfsave: '1' });
+  assert.strictEqual(calls.addManualTask.length, 1);
+  assert.strictEqual(calls.addManualTask[0].tasks.length, 2);
+  assert.match(main.innerHTML, /30 年的軌跡[\s\S]*手動/);
+  assert.ok(!main.innerHTML.includes('data-mf="name"'), 'form closes after adding');
+  assert.ok(!/30 年的軌跡[\s\S]*見原文/.test(main.innerHTML.slice(main.innerHTML.indexOf('30 年的軌跡'))), 'no 見原文 link without url');
+  // 照順序勾：勾第 2 項時第 1 項一起勾
+  app.toggleTask('my-1', 1, true);
+  assert.strictEqual(app.draftCount(), 2);
+  click(listeners, { mfdel: 'my-1' });
+  assert.deepStrictEqual(calls.deleteManualTask, ['my-1']);
+  assert.ok(!main.innerHTML.includes('30 年的軌跡'));
+});
+
+test('manual task form checks the input before sending', () => {
+  const { app, main, listeners, calls, elements } = loadApp(sampleData());
+  app.ui.tab = 'tasks'; app.render();
+  click(listeners, { mfopen: '1' });
+  click(listeners, { mfsave: '1' });
+  assert.strictEqual(calls.addManualTask.length, 0);
+  assert.match(elements.toast.textContent, /名稱/);
+  assert.match(main.innerHTML, /data-mf="name"/);
+});
