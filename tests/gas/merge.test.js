@@ -154,3 +154,41 @@ test('remindTasks: one early reminder within 2 days, then hourly in the last 4 h
   assert.deepStrictEqual(names.filter((n) => n.includes('soon')).length, 2);
   assert.ok(!names.some((n) => n.includes('far')));
 });
+
+test('manual task groups: add, list in getData, remind, delete and prune', () => {
+  const HOUR = 36e5;
+  const { gas, sheets, fetched, userStores } = load({ scriptProps: { DISCORD_WEBHOOK_URL: 'https://hook' } });
+  sheets.tasks = [];
+  const end = new Date(Date.now() + 3 * HOUR).toISOString();
+  const list = gas.addManualTask({ name: '限時調查：30 年的軌跡', end, tasks: [{ text: '捕捉 30 隻寶可夢', reward: '精靈球 ×10' }, { text: '  ' }] });
+  assert.strictEqual(list.length, 1);
+  const g = list[0];
+  assert.match(g.id, /^my-[0-9a-z]+$/);
+  assert.strictEqual(g.manual, true);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(g.tasks)), [{ id: 't1', text: '捕捉 30 隻寶可夢', reward: '精靈球 ×10' }]);
+  assert.strictEqual(gas.getData().tasks.length, 1);
+  gas.remindTasks();
+  assert.match(fetched[0].body.content, /30 年的軌跡/);
+  // 別人看不到
+  gas.user = 'other';
+  assert.strictEqual(gas.getData().tasks.length, 0);
+  gas.user = 'me';
+  assert.strictEqual(gas.deleteManualTask(g.id).length, 0);
+  // 結束超過 keepArchiveDays 天的組在 getData 時刪掉
+  userStores.me['manual:my-old'] = JSON.stringify({ id: 'my-old', name: 'old', end: new Date(Date.now() - 40 * 864e5).toISOString(), tasks: [] });
+  assert.strictEqual(gas.getData().tasks.length, 0);
+  assert.ok(!('manual:my-old' in userStores.me));
+});
+
+test('addManualTask rejects bad input', () => {
+  const { gas } = load();
+  const end = new Date(Date.now() + 36e5).toISOString();
+  assert.throws(() => gas.addManualTask({ name: '', end, tasks: [{ text: 'a' }] }));
+  assert.throws(() => gas.addManualTask({ name: 'x', end: new Date(Date.now() - 1000).toISOString(), tasks: [{ text: 'a' }] }));
+  assert.throws(() => gas.addManualTask({ name: 'x', end, tasks: [] }));
+  assert.throws(() => gas.addManualTask({ name: 'x', end, tasks: Array.from({ length: 31 }, () => ({ text: 'a' })) }));
+  assert.throws(() => gas.deleteManualTask('manual:../x'));
+  // 中文一個字 3 個位元組：30 項 × 160 字超過 9 KB
+  const long = '捕'.repeat(80);
+  assert.throws(() => gas.addManualTask({ name: 'x', end, tasks: Array.from({ length: 30 }, () => ({ text: long, reward: long })) }), /太長/);
+});

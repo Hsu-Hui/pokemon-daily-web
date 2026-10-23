@@ -120,6 +120,9 @@ def parse_bahamut_list(html: str) -> list[tuple[str, str, str]]:
         if not m or m[1] in seen or not title:
             continue
         if "情報" not in title[:6] or not any(k in title for k in config.BAHAMUT_TITLE_KEYWORDS):
+            if "情報" in title[:6] and m[1] not in seen:
+                print(f"巴哈：略過（標題沒有{'／'.join(config.BAHAMUT_TITLE_KEYWORDS)}）：{title[:60]}")
+                seen.add(m[1])
             continue
         seen.add(m[1])
         out.append((m[1], title, f"{config.BAHAMUT_POST_URL}?bsn={config.BAHAMUT_BSN}&snA={m[1]}"))

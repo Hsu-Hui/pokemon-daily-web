@@ -7,7 +7,7 @@ const vm = require('vm');
 const GAS = path.join(__dirname, '..', '..', 'gas');
 
 function loadApp(data, opts = {}) {
-  const calls = { saveTasks: [], toggleFavorite: [] };
+  const calls = { saveTasks: [], toggleFavorite: [], addManualTask: [], deleteManualTask: [] };
   const html = fs.readFileSync(path.join(GAS, 'App.html'), 'utf8');
   const code = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
   const elements = {};
@@ -26,6 +26,17 @@ function loadApp(data, opts = {}) {
       const rest = data.favorites.filter((f) => !(f.kind === item.kind && f.id === item.id));
       handlers.success(on ? [Object.assign({ starredAt: new Date().toISOString() }, item)].concat(rest) : rest);
     },
+    addManualTask(input) {
+      calls.addManualTask.push(input);
+      if (opts.manualFails) return handlers.failure(new Error('任務要 1～30 項'));
+      const g = Object.assign({ id: 'my-1', url: '', start: new Date().toISOString(), manual: true }, input,
+        { tasks: input.tasks.map((t, i) => Object.assign({ id: 't' + (i + 1) }, t)) });
+      handlers.success(data.tasks.filter((x) => x.manual).concat(g));
+    },
+    deleteManualTask(id) {
+      calls.deleteManualTask.push(id);
+      handlers.success(data.tasks.filter((x) => x.manual && x.id !== id));
+    },
     saveTasks(changes) {
       calls.saveTasks.push(changes);
       if (opts.saveFails) return handlers.failure(new Error('down'));
@@ -41,12 +52,12 @@ function loadApp(data, opts = {}) {
       addEventListener(type, fn) { listeners[type] = fn; },
       querySelector: (sel) => (sel === 'input[data-shopquery]' ? searchBox : null),
     },
-    window: { scrollTo() {}, addEventListener(type, fn) { listeners['window:' + type] = fn; } },
+    window: { scrollTo() {}, confirm: () => opts.confirm !== false, addEventListener(type, fn) { listeners['window:' + type] = fn; } },
     localStorage: opts.storage || { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } },
     google: { script: { run: runner } },
   };
   vm.createContext(context);
-  vm.runInContext(code + '\n;this.__app = { ui, render, matchesQuery, toggleTask, draftCount };', context);
+  vm.runInContext(code + '\n;this.__app = { ui, render, matchesQuery, toggleTask, draftCount, parseManualLines, data: () => data };', context);
   return { app: context.__app, main: el('main'), savebar: el('savebar'), elements, listeners, searchBox, calls };
 }
 

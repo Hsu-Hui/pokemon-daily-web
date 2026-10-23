@@ -198,7 +198,7 @@ function getData() {
   return {
     updatedAt: meta.updatedAt || null,
     events: readRows_('events'),
-    tasks: readRows_('tasks'),
+    tasks: readRows_('tasks').concat(listManual_(true)),
     products: readRows_('products'),
     news: readRows_('news'),
     state: loadState_(),
@@ -290,6 +290,67 @@ function saveTasks(changes) {
   }
 }
 
+// ---------- 手動新增的任務組 ----------
+
+// 遊戲裡才看得到的限時調查（例如台灣現場活動）網路上抓不到，讓使用者自己輸入。
+// 每組各存一個屬性 manual:<id>，只有自己看得到；照限時調查的規則依序勾選、提醒。
+const MANUAL_PREFIX = 'manual:';
+const MANUAL_MAX = 30;            // 每人最多幾組
+const MANUAL_TASKS_MAX = 30;      // 每組最多幾個任務
+const MANUAL_NAME_MAX = 60;
+const MANUAL_TEXT_MAX = 80;       // 任務、獎勵各最多幾個字（一個屬性最多 9 KB）
+
+/** prune 為 true 時順便刪掉結束超過 keepArchiveDays 天的組。 */
+function listManual_(prune) {
+  const props = PropertiesService.getUserProperties();
+  const all = props.getProperties();
+  const cutoff = Date.now() - BOARD.keepArchiveDays * 864e5;
+  return Object.keys(all).filter((k) => k.indexOf(MANUAL_PREFIX) === 0).map((k) => {
+    const g = JSON.parse(all[k]);
+    if (prune && new Date(g.end).getTime() < cutoff) { props.deleteProperty(k); return null; }
+    return g;
+  }).filter(Boolean).sort((a, b) => String(a.end).localeCompare(String(b.end)));
+}
+
+/**
+ * 網頁呼叫：新增一組任務。input = { name, end（ISO）, tasks: [{ text, reward }] }。
+ * 回傳目前全部手動任務組。
+ */
+function addManualTask(input) {
+  const name = String((input && input.name) || '').trim().slice(0, MANUAL_NAME_MAX);
+  const end = new Date(input && input.end);
+  const tasks = ((input && input.tasks) || []).map((t) => ({
+    text: String((t && t.text) || '').trim().slice(0, MANUAL_TEXT_MAX),
+    reward: String((t && t.reward) || '').trim().slice(0, MANUAL_TEXT_MAX),
+  })).filter((t) => t.text);
+  if (!name || isNaN(end.getTime()) || end.getTime() <= Date.now()) throw new Error('請填名稱和還沒到的結束時間');
+  if (!tasks.length || tasks.length > MANUAL_TASKS_MAX) throw new Error(`任務要 1～${MANUAL_TASKS_MAX} 項`);
+  const lock = LockService.getUserLock();
+  lock.waitLock(10000);
+  try {
+    if (listManual_(false).length >= MANUAL_MAX) throw new Error('手動任務組已滿');
+    const id = 'my-' + Date.now().toString(36);
+    const group = {
+      id, name, url: '', start: new Date().toISOString(), end: end.toISOString(), manual: true,
+      tasks: tasks.map((t, i) => ({ id: 't' + (i + 1), text: t.text, reward: t.reward })),
+    };
+    const json = JSON.stringify(group);
+    // 一個屬性最多 9 KB（UTF-8 位元組）
+    if (encodeURIComponent(json).replace(/%[0-9A-F]{2}/g, 'x').length > 9000) throw new Error('任務內容太長，請分成兩組');
+    PropertiesService.getUserProperties().setProperty(MANUAL_PREFIX + id, json);
+    return listManual_(false);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 網頁呼叫：刪掉自己新增的一組任務。回傳目前全部手動任務組。 */
+function deleteManualTask(id) {
+  if (!/^my-[0-9a-z]+$/.test(String(id))) throw new Error('bad id');
+  PropertiesService.getUserProperties().deleteProperty(MANUAL_PREFIX + id);
+  return listManual_(false);
+}
+
 // ---------- Discord 任務提醒 ----------
 
 function remindTasks() {
@@ -301,7 +362,7 @@ function remindTasks() {
   // 結束前 earlyRemindHours 小時先提醒一次（記在 earlyReminded），最後 remindHours 小時每小時提醒
   const props = PropertiesService.getUserProperties();
   const early = JSON.parse(props.getProperty('earlyReminded') || '{}');
-  const groups = readRows_('tasks');
+  const groups = readRows_('tasks').concat(listManual_(false));
   groups.forEach((g) => {
     if (!g.end || state.gaveUp[g.id]) return;
     const left = new Date(g.end) - now;
