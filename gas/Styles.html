@@ -113,12 +113,18 @@ select { font: inherit; font-size: 14px; min-height: 40px; padding: 0 12px; bord
 .product-wrap > .product { flex: 1 1 auto; min-width: 0; }
 .product-wrap > .star { position: absolute; top: 8px; right: 8px; }
 .notice { padding: 10px 14px; border-radius: 12px; background: #FDEBD3; color: #7A4200; font-size: 14px; }
-/* 儲存列：固定在最上面 */
-.savebar { position: sticky; top: 0; z-index: 10; background: var(--surface); border-bottom: 1px solid var(--line); }
-.savebar:empty { display: none; }
-.savebar-inner { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-height: 52px; }
+.task-title-row { width: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; }
+.task-save-controls { margin-left: auto; display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; }
+.task-save-controls span { white-space: nowrap; }
+.task-description { flex-basis: 100%; }
 .save { min-height: 40px; padding: 0 22px; border-radius: 999px; border: 0; background: var(--red); color: #FFFFFF; font-weight: 700; }
 .save:disabled { background: var(--sunk); color: var(--muted); cursor: default; }
+@media (max-width: 420px) {
+  .task-title-row { gap: 6px; }
+  .task-save-controls { gap: 6px; }
+  .task-save-controls span { font-size: 12px !important; }
+  .task-save-controls .save { min-height: 36px; padding: 0 14px; }
+}
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--active-bg); color: var(--active-ink); padding: 10px 18px; border-radius: 999px; font-size: 14px; display: none; }
 /* GO 活動行事曆：第一欄是活動名稱（窄螢幕名稱放在色條上一行），其餘每欄一天 */
 .cal { display: grid; grid-auto-rows: minmax(32px, auto); row-gap: 4px; }

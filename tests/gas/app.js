@@ -7,10 +7,11 @@ const vm = require('vm');
 const GAS = path.join(__dirname, '..', '..', 'gas');
 
 function loadApp(data, opts = {}) {
-  const calls = { saveTasks: [], toggleFavorite: [], addManualTask: [], deleteManualTask: [] };
+  const calls = { saveTasks: [], toggleFavorite: [], addManualTask: [], updateManualTask: [], deleteManualTask: [] };
   const html = fs.readFileSync(path.join(GAS, 'App.html'), 'utf8');
   const code = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
   const elements = {};
+  const scrollCalls = [];
   const el = (id) => (elements[id] = elements[id] || { id, innerHTML: '', textContent: '', style: {}, focus() {} });
   const handlers = {};
   const listeners = {};
@@ -19,7 +20,10 @@ function loadApp(data, opts = {}) {
     withSuccessHandler(fn) { handlers.success = fn; return runner; },
     withFailureHandler(fn) { handlers.failure = fn; return runner; },
     getData() { handlers.success(data); },
-    setFlag() {},
+    setFlag(kind, id, value) {
+      if (value) data.state[kind][id] = true; else delete data.state[kind][id];
+      handlers.success(data.state);
+    },
     toggleFavorite(item, on) {
       calls.toggleFavorite.push([item, on]);
       if (opts.favFails) return handlers.failure(new Error('down'));
@@ -33,6 +37,16 @@ function loadApp(data, opts = {}) {
         { tasks: input.tasks.map((t, i) => Object.assign({ id: 't' + (i + 1) }, t)) });
       handlers.success(data.tasks.filter((x) => x.manual).concat(g));
     },
+    updateManualTask(id, input) {
+      calls.updateManualTask.push([id, input]);
+      if (opts.manualUpdateFails) return handlers.failure(new Error('更新失敗'));
+      const old = data.tasks.find((x) => x.manual && x.id === id);
+      if (!old) return handlers.failure(new Error('找不到任務組'));
+      let next = old.tasks.reduce((n, t) => Math.max(n, Number(String(t.id || '').replace(/^t/, '')) || 0), 0) + 1;
+      const tasks = input.tasks.map((t) => Object.assign({}, t, { id: t.id || 't' + next++ }));
+      const updated = Object.assign({}, old, input, { id: old.id, start: old.start, manual: true, tasks });
+      handlers.success(data.tasks.filter((x) => x.manual && x.id !== id).concat(updated));
+    },
     deleteManualTask(id) {
       calls.deleteManualTask.push(id);
       handlers.success(data.tasks.filter((x) => x.manual && x.id !== id));
@@ -45,6 +59,13 @@ function loadApp(data, opts = {}) {
       handlers.success(Object.assign({}, data.state, { taskDone }));
     },
   };
+  const windowObj = {
+    scrollY: opts.scrollY || 0, pageYOffset: opts.scrollY || 0,
+    scrollTo(x, y) { scrollCalls.push([x, y]); this.scrollY = y; this.pageYOffset = y; },
+    requestAnimationFrame(fn) { fn(); },
+    confirm: () => opts.confirm !== false,
+    addEventListener(type, fn) { listeners['window:' + type] = fn; },
+  };
   const context = {
     console, Intl, Date, setTimeout, clearTimeout,
     document: {
@@ -52,13 +73,14 @@ function loadApp(data, opts = {}) {
       addEventListener(type, fn) { listeners[type] = fn; },
       querySelector: (sel) => (sel === 'input[data-shopquery]' ? searchBox : null),
     },
-    window: { scrollTo() {}, confirm: () => opts.confirm !== false, addEventListener(type, fn) { listeners['window:' + type] = fn; } },
+    window: windowObj,
+    requestAnimationFrame(fn) { fn(); },
     localStorage: opts.storage || { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } },
     google: { script: { run: runner } },
   };
   vm.createContext(context);
   vm.runInContext(code + '\n;this.__app = { ui, render, matchesQuery, toggleTask, draftCount, parseManualLines, data: () => data };', context);
-  return { app: context.__app, main: el('main'), savebar: el('savebar'), elements, listeners, searchBox, calls };
+  return { app: context.__app, main: el('main'), savebar: el('savebar'), elements, listeners, searchBox, calls, scrollCalls, window: windowObj };
 }
 
 function sampleData(overrides = {}) {

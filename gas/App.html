@@ -14,7 +14,8 @@ const PAGE_SIZE = 25;
 // goCats、feeds 是多選，空陣列代表「全部」；goSort.key 為 null 時用預設排序（類型 → 開始 → 結束）
 // draft：任務勾選的草稿（key → true/false），按「儲存」才送出；saving：儲存中
 // calWeek：行事曆從本週往後移幾週；calOpen：行事曆是否展開
-const ui = { draft: {}, saving: false, tab: 'overview', goCats: [], feeds: [], goSort: { key: null, dir: 1 }, shopSort: 'new', shopQuery: '', page: {}, calWeek: 0, calOpen: true, taskOpen: {}, mf: { open: false, name: '', end: '', lines: '', saving: false } };
+const emptyManualForm = () => ({ open: false, id: '', name: '', end: '', lines: '', originals: [], saving: false });
+const ui = { draft: {}, saving: false, tab: 'overview', goCats: [], feeds: [], goSort: { key: null, dir: 1 }, shopSort: 'new', shopQuery: '', page: {}, calWeek: 0, calOpen: true, taskOpen: {}, mf: emptyManualForm() };
 let data = null;
 try { ui.tab = localStorage.getItem('tab') || 'overview'; } catch (e) {}
 try { ui.calOpen = localStorage.getItem('calOpen') !== '0'; } catch (e) {}
@@ -34,58 +35,62 @@ function toast(msg) {
   clearTimeout(toast.t); toast.t = setTimeout(() => { el.style.display = 'none'; }, 2500);
 }
 
+const scrollTopNow = () => window.scrollY || window.pageYOffset || 0;
+function renderPreservingScroll(top) {
+  const y = top == null ? scrollTopNow() : top;
+  render();
+  window.requestAnimationFrame(() => window.scrollTo(0, y));
+}
+
 function setFlag(kind, id, value) {
+  const top = scrollTopNow();
   const prev = !!data.state[kind][id];
   if (value) data.state[kind][id] = true; else delete data.state[kind][id];
-  render();
+  renderPreservingScroll(top);
   google.script.run
-    .withSuccessHandler((state) => { data.state = state; render(); })
+    .withSuccessHandler((state) => { data.state = state; renderPreservingScroll(top); })
     .withFailureHandler(() => {
       if (prev) data.state[kind][id] = true; else delete data.state[kind][id];
-      render(); toast('儲存失敗，請再試一次');
+      renderPreservingScroll(top); toast('儲存失敗，請再試一次');
     })
     .setFlag(kind, id, value);
 }
 
 // ---------- 任務勾選草稿 ----------
 
-// 限時調查（LeekDuck ld-、巴哈 bh-、手動新增 my-）照順序做；田野調查（field-）各自獨立
-const isSequential = (groupId) => /^(ld|bh|my)-/.test(groupId);
 const taskKey = (g, t, i) => g.id + '#' + (t.id || i);
 const savedDone = (key) => !!data.state.taskDone[key];
 const isDone = (key) => (key in ui.draft ? ui.draft[key] : savedDone(key));
 
-/** 勾或取消第 index 項：限時調查勾第 N 項時 1～N 都勾，取消第 N 項時 N 之後都取消。 */
+/** 勾或取消第 index 項：所有待辦任務都照順序，勾第 N 項時 1～N 都勾，取消第 N 項時 N 之後都取消。 */
 function toggleTask(groupId, index, checked) {
   const g = data.tasks.find((x) => x.id === groupId);
-  if (!g) return;
+  if (!g || /^field-/.test(groupId)) return;
   const keys = g.tasks.map((t, i) => taskKey(g, t, i));
-  const targets = !isSequential(groupId) ? [keys[index]] : checked ? keys.slice(0, index + 1) : keys.slice(index);
+  const targets = checked ? keys.slice(0, index + 1) : keys.slice(index);
   targets.forEach((key) => {
     if (checked === savedDone(key)) delete ui.draft[key];
     else ui.draft[key] = checked;
   });
-  render();
+  renderPreservingScroll();
 }
 
 const draftCount = () => Object.keys(ui.draft).length;
 
 function saveDraft() {
   if (!draftCount() || ui.saving) return;
+  const top = scrollTopNow();
   ui.saving = true;
-  renderSaveBar();
+  renderPreservingScroll(top);
   google.script.run
-    .withSuccessHandler((state) => { data.state = state; ui.draft = {}; ui.saving = false; render(); toast('已儲存'); })
-    .withFailureHandler(() => { ui.saving = false; render(); toast('儲存失敗，請再試一次'); })
+    .withSuccessHandler((state) => { data.state = state; ui.draft = {}; ui.saving = false; renderPreservingScroll(top); toast('已儲存'); })
+    .withFailureHandler(() => { ui.saving = false; renderPreservingScroll(top); toast('儲存失敗，請再試一次'); })
     .saveTasks(Object.assign({}, ui.draft));
 }
 
-function renderSaveBar() {
+function saveControlsHtml() {
   const n = draftCount();
-  const bar = document.getElementById('savebar');
-  // 儲存列只放在任務待辦；草稿在其他分頁仍保留
-  if (ui.tab !== 'tasks') { bar.innerHTML = ''; return; }
-  bar.innerHTML = `<div class="wrap savebar-inner">
+  return `<div class="task-save-controls">
     <span class="${n ? 'soon' : 'muted'}" style="font-size:14px;font-weight:700">${ui.saving ? '儲存中…' : n ? `有 ${n} 項變更未儲存` : '已儲存'}</span>
     <button type="button" class="save" data-save ${n && !ui.saving ? '' : 'disabled'}>儲存</button>
   </div>`;
@@ -161,7 +166,12 @@ function derive() {
       soon: left > 0 && left < 24 * HOUR && !(start && start > now),
     });
   }).sort((a, b) => a.left - b.left);
-  const tasks = data.tasks.map((g) => {
+  // field- 是每日田野調查的獎勵對照表，不是可追蹤的待辦任務。
+  const fieldRewards = data.tasks.filter((g) => /^field-/.test(g.id)).map((g) => {
+    const end = g.end ? new Date(g.end).getTime() : null;
+    return Object.assign({}, g, { ended: end ? end <= now : false, left: end ? end - now : Infinity });
+  }).sort((a, b) => a.left - b.left);
+  const tasks = data.tasks.filter((g) => !/^field-/.test(g.id)).map((g) => {
     const end = g.end ? new Date(g.end).getTime() : null;
     const left = end ? end - now : Infinity;
     const items = g.tasks.map((t, i) => {
@@ -184,6 +194,7 @@ function derive() {
     // 已儲存為全部完成的任務組排到最後（勾完還沒按儲存時先留在原位）
     activeTasks: tasks.filter((g) => !g.gaveUp && !g.ended).sort((a, b) => a.savedAllDone - b.savedAllDone),
     archivedTasks: tasks.filter((g) => g.gaveUp || g.ended),
+    fieldRewards: fieldRewards.filter((g) => !g.ended),
     products, twNews,
     isNew: (p) => p.firstSeen && now - new Date(p.firstSeen).getTime() < 24 * HOUR,
   };
@@ -392,7 +403,7 @@ function taskGroupHtml(g) {
     ? `<a class="link" href="${esc(g.url)}" target="_blank" rel="noopener"><b style="font-size:16px">${esc(g.name)}</b></a>`
     : `<b style="font-size:16px">${esc(g.name)}</b>`;
   const mine = g.manual ? ' <span class="tag">手動</span>' : '';
-  const delButton = g.manual ? `<button type="button" class="ghost" data-mfdel="${esc(g.id)}">刪除</button>` : '';
+  const manualButtons = g.manual ? `<button type="button" class="ghost" data-mfedit="${esc(g.id)}">編輯</button><button type="button" class="ghost" data-mfdel="${esc(g.id)}">刪除</button>` : '';
   const foldButton = g.savedAllDone
     ? `<button type="button" class="ghost" data-taskopen="${esc(g.id)}" aria-expanded="${!folded}">${folded ? '展開' : '收合'}</button>` : '';
   if (folded) {
@@ -403,7 +414,7 @@ function taskGroupHtml(g) {
         <span class="muted" style="font-size:13px">${when(g.end)} 結束 · ${g.items.length} 項全部完成</span>
       </div>
       <b style="font-size:14px;color:var(--blue)">全部完成</b>
-      ${foldButton}${delButton}
+      ${foldButton}${manualButtons}
     </div>`;
   }
   return `
@@ -414,7 +425,7 @@ function taskGroupHtml(g) {
           <span class="muted" style="font-size:13px">${when(g.start)} 開始 → ${when(g.end)} 結束${g.end ? ` · <b class="${g.soon ? 'soon' : ''}">剩 ${leftText(g.left)}</b>` : ''}</span>
         </div>
         <b style="font-size:14px;color:var(--blue)">${g.allDone ? '全部完成' : `${g.n}/${g.items.length} 完成`}</b>
-        ${foldButton || `<button type="button" class="ghost" data-flag="gaveUp" data-id="${esc(g.id)}" data-value="1">放棄</button>`}${delButton}
+        ${foldButton || `<button type="button" class="ghost" data-flag="gaveUp" data-id="${esc(g.id)}" data-value="1">放棄</button>`}${manualButtons}
       </div>
       <div class="bar"><div style="width:${pct}%"></div></div>
       ${g.items.map((t) => `
@@ -426,6 +437,31 @@ function taskGroupHtml(g) {
           </span>
         </label>`).join('')}
     </div>`;
+}
+
+function fieldRewardsHtml(groups) {
+  if (!groups.length) return '';
+  return `
+    <section class="card pad stack field-rewards" aria-label="日常田野調查獎勵">
+      <div class="stack" style="gap:2px">
+        <h3>日常田野調查獎勵</h3>
+        <span class="muted" style="font-size:13px">只供查詢，不會計入任務進度或完成提醒</span>
+      </div>
+      ${groups.map((g) => `
+        <div class="stack" style="gap:8px">
+          <div class="row group-head">
+            ${g.url ? `<a class="link grow" href="${esc(g.url)}" target="_blank" rel="noopener"><b>${esc(g.name)}</b></a>` : `<b class="grow">${esc(g.name)}</b>`}
+            ${g.end ? `<span class="muted" style="font-size:13px">更新至 ${when(g.end)}</span>` : ''}
+          </div>
+          ${g.tasks.map((t) => `
+            <div class="task field-reward">
+              <span class="body">
+                <span class="text">${esc(t.text)}</span>
+                <span class="reward">${t.reward ? esc(t.reward) : g.url ? `<a href="${esc(g.url)}" target="_blank" rel="noopener">見原文</a>` : ''}</span>
+              </span>
+            </div>`).join('')}
+        </div>`).join('')}
+    </section>`;
 }
 
 function productCard(p, isNew, gone) {
@@ -462,7 +498,7 @@ function newsItem(n, gone) {
 function renderOverview(d) {
   const soonEvents = d.activeEvents.filter((e) => e.soon);
   // 「快結束了」：沒做完、在 overviewTaskHours（預設 48 小時）內結束的任務組
-  const soonTasks = d.activeTasks.filter((g) => g.n < g.items.length && g.left < CONFIG.overviewTaskHours * HOUR);
+  const soonTasks = d.activeTasks.filter((g) => !g.allDone && g.left < CONFIG.overviewTaskHours * HOUR);
   const allItems = d.activeTasks.flatMap((g) => g.items);
   const fresh = d.products.filter(d.isNew);
   return `
@@ -512,12 +548,45 @@ function parseManualLines(text) {
   }).filter((t) => t.text);
 }
 
+const manualLines = (tasks) => tasks.map((t) => t.text + (t.reward ? ` → ${t.reward}` : '')).join('\n');
+const localDateTime = (iso) => {
+  const d = new Date(iso);
+  return isNaN(d) ? '' : new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
+};
+
+function openManualEditor(id) {
+  const g = data.tasks.find((x) => x.manual && x.id === id);
+  if (!g) return;
+  ui.mf = {
+    open: true, id: g.id, name: g.name, end: localDateTime(g.end), lines: manualLines(g.tasks),
+    originals: g.tasks.map((t) => ({ id: t.id, text: t.text, reward: t.reward || '' })), saving: false,
+  };
+}
+
+/** 先以未修改內容配對原 id，再讓文字修正的同列沿用 id；其餘視為新項目。 */
+function manualTasksWithIds(tasks, originals) {
+  const used = {};
+  const ids = tasks.map((t) => {
+    const exact = originals.find((o) => !used[o.id] && o.text === t.text && o.reward === t.reward);
+    if (!exact) return '';
+    used[exact.id] = true;
+    return exact.id;
+  });
+  return tasks.map((t, i) => {
+    let id = ids[i];
+    const sameRow = originals[i];
+    if (!id && sameRow && !used[sameRow.id]) { id = sameRow.id; used[id] = true; }
+    return id ? Object.assign({ id }, t) : t;
+  });
+}
+
 function manualFormHtml() {
   const f = ui.mf;
   if (!f.open) return '<div class="toolbar"><button type="button" class="outline" data-mfopen="1">＋ 新增任務組</button><span class="muted">遊戲裡才看得到的限時調查（例如台灣現場活動）可以自己加</span></div>';
+  const editing = !!f.id;
   return `
-    <section class="card pad stack" aria-label="新增任務組">
-      <h3>新增任務組</h3>
+    <section class="card pad stack" aria-label="${editing ? '編輯' : '新增'}任務組">
+      <h3>${editing ? '編輯' : '新增'}任務組</h3>
       <label class="stack" style="gap:4px"><span class="muted">名稱</span>
         <input class="field" data-mf="name" value="${esc(f.name)}" maxlength="60" placeholder="例如：限時調查：30 年的軌跡"></label>
       <label class="stack" style="gap:4px"><span class="muted">結束時間</span>
@@ -525,7 +594,7 @@ function manualFormHtml() {
       <label class="stack" style="gap:4px"><span class="muted">任務（一行一個，照遊戲裡的順序；獎勵用 → 分開，可以不寫）</span>
         <textarea class="field" data-mf="lines" rows="6" placeholder="捕捉 30 隻寶可夢 → 精靈球 ×10&#10;轉動 5 個補給站">${esc(f.lines)}</textarea></label>
       <div class="toolbar">
-        <button type="button" class="save" data-mfsave="1" ${f.saving ? 'disabled' : ''}>${f.saving ? '新增中…' : '新增'}</button>
+        <button type="button" class="save" data-mfsave="1" ${f.saving ? 'disabled' : ''}>${f.saving ? (editing ? '更新中…' : '新增中…') : (editing ? '儲存修改' : '新增')}</button>
         <button type="button" class="ghost" data-mfopen="0">取消</button>
       </div>
     </section>`;
@@ -533,37 +602,53 @@ function manualFormHtml() {
 
 function saveManual() {
   const f = ui.mf;
-  const tasks = parseManualLines(f.lines);
+  const parsed = parseManualLines(f.lines);
+  const tasks = f.id ? manualTasksWithIds(parsed, f.originals) : parsed;
   const end = f.end ? new Date(f.end) : null;
   if (!f.name.trim() || !end || isNaN(end) || end <= new Date()) { toast('請填名稱和還沒到的結束時間'); return; }
   if (!tasks.length) { toast('至少要有一個任務'); return; }
-  f.saving = true; render();
-  google.script.run
+  const top = scrollTopNow();
+  f.saving = true; renderPreservingScroll(top);
+  const request = google.script.run
     .withSuccessHandler((list) => {
+      const oldId = f.id;
       data.tasks = data.tasks.filter((g) => !g.manual).concat(list);
-      ui.mf = { open: false, name: '', end: '', lines: '', saving: false };
-      render(); toast('已新增');
+      if (oldId) {
+        const valid = {};
+        const updated = list.find((g) => g.id === oldId);
+        if (updated) updated.tasks.forEach((t, i) => { valid[taskKey(updated, t, i)] = true; });
+        Object.keys(ui.draft).forEach((key) => { if (key.startsWith(oldId + '#') && !valid[key]) delete ui.draft[key]; });
+        Object.keys(data.state.taskDone).forEach((key) => { if (key.startsWith(oldId + '#') && !valid[key]) delete data.state.taskDone[key]; });
+      }
+      ui.mf = emptyManualForm();
+      renderPreservingScroll(top); toast(oldId ? '已更新' : '已新增');
     })
-    .withFailureHandler((err) => { f.saving = false; render(); toast((err && err.message) || '新增失敗，請再試一次'); })
-    .addManualTask({ name: f.name.trim(), end: end.toISOString(), tasks });
+    .withFailureHandler((err) => { f.saving = false; renderPreservingScroll(top); toast((err && err.message) || (f.id ? '更新失敗，請再試一次' : '新增失敗，請再試一次')); });
+  const input = { name: f.name.trim(), end: end.toISOString(), tasks };
+  if (f.id) request.updateManualTask(f.id, input); else request.addManualTask(input);
 }
 
 function deleteManual(id) {
   const g = data.tasks.find((x) => x.id === id);
   if (!g || !window.confirm(`刪除「${g.name}」？`)) return;
+  const top = scrollTopNow();
   const prev = data.tasks;
   data.tasks = data.tasks.filter((x) => x.id !== id);
-  render();
+  renderPreservingScroll(top);
   google.script.run
-    .withSuccessHandler((list) => { data.tasks = data.tasks.filter((x) => !x.manual).concat(list); render(); })
-    .withFailureHandler(() => { data.tasks = prev; render(); toast('刪除失敗，請再試一次'); })
+    .withSuccessHandler((list) => { data.tasks = data.tasks.filter((x) => !x.manual).concat(list); renderPreservingScroll(top); })
+    .withFailureHandler(() => { data.tasks = prev; renderPreservingScroll(top); toast('刪除失敗，請再試一次'); })
     .deleteManualTask(id);
 }
 
 function renderTasks(d) {
   const { items, pager } = paginate(d.activeTasks, 'tasks');
   return `
-    <div class="head"><h2>任務待辦</h2><span class="muted">田野調查和活動限時調查來自 LeekDuck，另外會讀巴哈姆特 Pokémon GO 哈啦板的情報；結束前 ${REMIND_MS / HOUR} 小時還沒完成會發 Discord 提醒</span></div>
+    <div class="head task-head">
+      <div class="task-title-row"><h2>任務待辦</h2>${saveControlsHtml()}</div>
+      <span class="muted task-description">田野調查和活動限時調查來自 LeekDuck，另外會讀巴哈姆特 Pokémon GO 哈啦板的情報；結束前 ${REMIND_MS / HOUR} 小時還沒完成會發 Discord 提醒</span>
+    </div>
+    ${fieldRewardsHtml(d.fieldRewards)}
     ${manualFormHtml()}
     ${(items.map((g, i) => (g.savedAllDone && !(items[i - 1] || {}).savedAllDone ? `<h3 class="muted" style="margin-top:8px">已完成 ${d.activeTasks.filter((x) => x.savedAllDone).length} 組</h3>` : '') + taskGroupHtml(g)).join('') || '<p class="muted">目前沒有任務</p>') + pager}`;
 }
@@ -646,23 +731,23 @@ const RENDERERS = {
 
 function render() {
   renderTabs();
-  renderSaveBar();
   document.getElementById('main').innerHTML = (RENDERERS[ui.tab] || renderOverview)(derive());
 }
 
 // ---------- 事件 ----------
 
 document.addEventListener('click', (ev) => {
-  const t = ev.target.closest('[data-tab],[data-taskopen],[data-mfopen],[data-mfsave],[data-mfdel],[data-gocat],[data-calmove],[data-caltoggle],[data-feed],[data-sort],[data-page],button[data-flag],button[data-save],button[data-fav]');
+  const t = ev.target.closest('[data-tab],[data-taskopen],[data-mfopen],[data-mfedit],[data-mfsave],[data-mfdel],[data-gocat],[data-calmove],[data-caltoggle],[data-feed],[data-sort],[data-page],button[data-flag],button[data-save],button[data-fav]');
   if (!t || t.disabled) return;
   const ds = t.dataset;
   if ('save' in ds) { saveDraft(); return; }
   if (ds.mfsave) { saveManual(); return; }
+  if (ds.mfedit) { const top = scrollTopNow(); openManualEditor(ds.mfedit); renderPreservingScroll(top); return; }
   if (ds.mfdel) { deleteManual(ds.mfdel); return; }
   if (ds.fav) { toggleFav(ds.fav, ds.id); return; }
   if (ds.tab) { ui.tab = ds.tab; try { localStorage.setItem('tab', ui.tab); } catch (e) {} window.scrollTo(0, 0); }
-  else if (ds.mfopen) { ui.mf.open = ds.mfopen === '1'; }
-  else if (ds.taskopen) { ui.taskOpen[ds.taskopen] = !ui.taskOpen[ds.taskopen]; }
+  else if (ds.mfopen) { ui.mf = ds.mfopen === '1' ? Object.assign(emptyManualForm(), { open: true }) : emptyManualForm(); renderPreservingScroll(); return; }
+  else if (ds.taskopen) { ui.taskOpen[ds.taskopen] = !ui.taskOpen[ds.taskopen]; renderPreservingScroll(); return; }
   else if (ds.calmove) { ui.calWeek = +ds.calmove ? ui.calWeek + +ds.calmove : 0; }
   else if (ds.caltoggle) { ui.calOpen = !ui.calOpen; try { localStorage.setItem('calOpen', ui.calOpen ? '1' : '0'); } catch (e) {} }
   else if (ds.gocat) { ui.goCats = toggleIn(ui.goCats, ds.gocat); ui.page.go = 1; }
