@@ -42,7 +42,7 @@ The dashboard SHALL have seven tabs: Overview, GO Events, Tasks, New Products, E
 #### Scenario: 總覽內容
 
 - **WHEN** the user opens Overview
-- **THEN** the page SHALL show active event count, events ending within 24 hours, effective task progress for trackable tasks, today's new-product count, a "快結束了，還沒完成" list, and up to 8 products added today; the list SHALL include only non-abandoned trackable task groups whose effective state has at least one current task not completed and ending within `overviewTaskHours`, plus events ending within 24 hours
+- **THEN** the page SHALL show active event count, events ending within 24 hours, effective task progress for trackable tasks, today's new-product count, a "快結束了，還沒完成" list, and up to 8 products added today; the list SHALL include only non-abandoned trackable task groups whose effective state has at least one current task not completed and ending within `overviewTaskHours`, plus events ending within 24 hours that do not correspond to an all-complete task group
 
 #### Scenario: 任務組 40 小時後結束
 
@@ -52,7 +52,7 @@ The dashboard SHALL have seven tabs: Overview, GO Events, Tasks, New Products, E
 #### Scenario: 已完成的小隕星流星雨
 
 - **WHEN** the Tasks page marks every current item in "小隕星流星雨：獵戶座 2026" as complete
-- **THEN** the group SHALL immediately disappear from "快結束了，還沒完成"
+- **THEN** both the task group and a corresponding same-source or normalized-name GO event SHALL immediately disappear from "快結束了，還沒完成", while the 24-hour event statistic SHALL continue to count the event
 
 #### Scenario: 尚未儲存的完成草稿
 
