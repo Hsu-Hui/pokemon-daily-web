@@ -155,6 +155,19 @@ test('remindTasks: one early reminder within 2 days, then hourly in the last 4 h
   assert.ok(!names.some((n) => n.includes('far')));
 });
 
+test('daily field research rewards never send Discord task reminders', () => {
+  const { gas, sheets, fetched } = load({ scriptProps: { DISCORD_WEBHOOK_URL: 'https://hook' } });
+  const end = new Date(Date.now() + 3 * 36e5).toISOString();
+  sheets.tasks = [
+    { id: 'field-202610', name: '10 月田野調查', end, tasks: [{ id: 'field', text: '捕捉 5 隻', reward: '遇見皮卡丘' }] },
+    { id: 'ld-timed', name: '限時調查', end, tasks: [{ id: 'timed', text: '捕捉 10 隻' }] },
+  ];
+  gas.remindTasks();
+  assert.strictEqual(fetched.length, 1);
+  assert.match(fetched[0].body.content, /限時調查/);
+  assert.ok(!fetched[0].body.content.includes('10 月田野調查'));
+});
+
 test('manual task groups: add, list in getData, remind, delete and prune', () => {
   const HOUR = 36e5;
   const { gas, sheets, fetched, userStores } = load({ scriptProps: { DISCORD_WEBHOOK_URL: 'https://hook' } });
@@ -191,4 +204,59 @@ test('addManualTask rejects bad input', () => {
   // 中文一個字 3 個位元組：30 項 × 160 字超過 9 KB
   const long = '捕'.repeat(80);
   assert.throws(() => gas.addManualTask({ name: 'x', end, tasks: Array.from({ length: 30 }, () => ({ text: long, reward: long })) }), /太長/);
+});
+
+test('updateManualTask keeps stable ids and atomically cleans removed progress', () => {
+  const { gas, userStores } = load();
+  const end = new Date(Date.now() + 36e5).toISOString();
+  const original = gas.addManualTask({
+    name: '打錯的名稱', end,
+    tasks: [
+      { text: '捕捉 10 隻寶可夢', reward: '精靈球 ×5' },
+      { text: '轉動 3 個補給站', reward: '' },
+    ],
+  })[0];
+  gas.saveTasks({ [`${original.id}#t1`]: true, [`${original.id}#t2`]: true });
+
+  const nextEnd = new Date(Date.now() + 2 * 36e5).toISOString();
+  const updated = gas.updateManualTask(original.id, {
+    name: '修正後名稱', end: nextEnd,
+    tasks: [
+      { id: 't1', text: '捕捉 10 隻寶可夢', reward: '精靈球 ×10' },
+      { text: '孵化 1 顆蛋', reward: '星星沙 ×500' },
+    ],
+  }).find((g) => g.id === original.id);
+
+  assert.strictEqual(updated.id, original.id);
+  assert.strictEqual(updated.start, original.start);
+  assert.strictEqual(updated.name, '修正後名稱');
+  assert.strictEqual(updated.end, nextEnd);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(updated.tasks)), [
+    { id: 't1', text: '捕捉 10 隻寶可夢', reward: '精靈球 ×10' },
+    { id: 't3', text: '孵化 1 顆蛋', reward: '星星沙 ×500' },
+  ]);
+  const state = JSON.parse(userStores.me.state);
+  assert.strictEqual(state.taskDone[`${original.id}#t1`], true);
+  assert.ok(!state.taskDone[`${original.id}#t2`]);
+  assert.ok(!state.taskDone[`${original.id}#t3`]);
+});
+
+test('updateManualTask rejects invalid edits without changing group or progress', () => {
+  const { gas, userStores } = load();
+  const end = new Date(Date.now() + 36e5).toISOString();
+  const group = gas.addManualTask({ name: '原本', end, tasks: [{ text: '任務一' }, { text: '任務二' }] })[0];
+  gas.saveTasks({ [`${group.id}#t1`]: true, [`${group.id}#t2`]: true });
+  const before = JSON.stringify(userStores.me);
+
+  assert.throws(() => gas.updateManualTask('manual:../x', { name: 'x', end, tasks: [{ id: 't1', text: 'x' }] }), /bad id/);
+  assert.throws(() => gas.updateManualTask(group.id, { name: '', end, tasks: [{ id: 't1', text: 'x' }] }));
+  assert.throws(() => gas.updateManualTask(group.id, { name: 'x', end, tasks: [{ id: 'missing', text: 'x' }] }), /bad task id/);
+  assert.throws(() => gas.updateManualTask(group.id, { name: 'x', end, tasks: [{ id: 't1', text: 'x' }, { id: 't1', text: 'y' }] }), /bad task id/);
+  assert.throws(() => gas.updateManualTask(group.id, { name: 'x', end, tasks: Array.from({ length: 31 }, () => ({ text: 'x' })) }));
+  const long = '捕'.repeat(80);
+  assert.throws(() => gas.updateManualTask(group.id, {
+    name: 'x', end, tasks: Array.from({ length: 30 }, (_, i) => ({ id: i < 2 ? `t${i + 1}` : undefined, text: long, reward: long })),
+  }), /太長/);
+
+  assert.strictEqual(JSON.stringify(userStores.me), before);
 });

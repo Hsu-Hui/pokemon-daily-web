@@ -150,33 +150,55 @@ test('timed research checks in order (example table)', () => {
   assert.deepStrictEqual(doneOf(data, 'ld-adidas', app), [1, 2, 3, 4]);
 });
 
-test('field research ticks one task only', () => {
+test('daily field research is a reward reference without task controls', () => {
   const data = researchData();
+  data.tasks[1].tasks[0].reward = '遇見 皮卡丘';
+  const { app, main } = loadApp(data);
+  app.ui.tab = 'tasks'; app.render();
+  assert.match(main.innerHTML, /日常田野調查獎勵/);
+  assert.match(main.innerHTML, /任務 1[\s\S]*遇見 皮卡丘/);
+  assert.ok(!main.innerHTML.includes('data-task="field-202610"'));
+  assert.strictEqual((main.innerHTML.match(/type="checkbox"/g) || []).length, 25);
+  app.ui.tab = 'overview'; app.render();
+  assert.match(main.innerHTML, /任務進度<\/span><b[^>]*>0\/25<\/b>/);
+  data.tasks[1].end = new Date(Date.now() - 36e5).toISOString();
+  app.ui.tab = 'archive'; app.render();
+  assert.ok(!main.innerHTML.includes('10 月田野調查'));
+});
+
+test('every trackable group checks in order, including a manual October group', () => {
+  const data = researchData();
+  const end = new Date(Date.now() + 30 * 36e5).toISOString();
+  data.tasks.push({
+    id: 'my-october', name: '10 月田野調查任務', url: '', manual: true,
+    start: null, end, tasks: Array.from({ length: 8 }, (_, i) => ({ id: 'm' + (i + 1), text: '步驟 ' + (i + 1), reward: '' })),
+  });
   const { app } = loadApp(data);
-  app.toggleTask('field-202610', 4, true);
-  assert.deepStrictEqual(doneOf(data, 'field-202610', app), [5]);
+  app.toggleTask('my-october', 4, true);
+  const checked = Array.from({ length: 8 }, (_, i) => i + 1).filter((n) => !!app.ui.draft[`my-october#m${n}`]);
+  assert.deepStrictEqual(checked, [1, 2, 3, 4, 5]);
 });
 
 test('ticks stay as a draft until saved, then saved in one call', () => {
   const data = researchData();
-  const { app, savebar, listeners, calls } = loadApp(data);
+  const { app, main, listeners, calls } = loadApp(data);
   app.ui.tab = 'tasks';
   app.toggleTask('ld-adidas', 2, true);
   assert.strictEqual(calls.saveTasks.length, 0);
-  assert.match(savebar.innerHTML, /有 3 項變更未儲存/);
+  assert.match(main.innerHTML, /有 3 項變更未儲存/);
   app.ui.tab = 'shop'; app.render();
   assert.strictEqual(app.draftCount(), 3, 'tab switch keeps the draft');
   const ev = { preventDefault() { this.prevented = true; } };
   listeners['window:beforeunload'](ev);
   assert.ok(ev.prevented, 'leaving with unsaved changes asks first');
-  assert.strictEqual(savebar.innerHTML, '', 'save bar only on 任務待辦');
+  assert.ok(!main.innerHTML.includes('data-save'), 'save control only on 任務待辦');
   app.ui.tab = 'tasks'; app.render();
-  assert.match(savebar.innerHTML, /有 3 項變更未儲存/);
+  assert.match(main.innerHTML, /有 3 項變更未儲存/);
   listeners.click({ target: { closest: () => ({ disabled: false, dataset: { save: '' } }) } });
   assert.strictEqual(calls.saveTasks.length, 1);
   assert.deepStrictEqual(Object.keys(calls.saveTasks[0]).sort(), ['ld-adidas#t1', 'ld-adidas#t2', 'ld-adidas#t3']);
   assert.strictEqual(app.draftCount(), 0);
-  assert.match(savebar.innerHTML, /已儲存/);
+  assert.match(main.innerHTML, /已儲存/);
 });
 
 test('failed save keeps the draft', () => {
@@ -195,6 +217,25 @@ test('overview lists unfinished task groups ending within 48 hours', () => {
   app.ui.tab = 'overview'; app.render();
   assert.match(main.innerHTML, /限時調查：adidas/);
   assert.ok(!main.innerHTML.includes('10 月田野調查'));
+});
+
+test('overview immediately removes any group the task page marks all done', () => {
+  const data = researchData();
+  data.tasks = [
+    { id: 'my-orion', name: '小隕星流星雨：獵戶座 2026', url: '', manual: true, start: null,
+      end: new Date(Date.now() + 3 * 36e5).toISOString(), tasks: [{ id: 'a', text: '任務 A', reward: '' }, { id: 'b', text: '任務 B', reward: '' }] },
+    { id: 'ld-generic', name: '其他快結束任務', url: 'u', start: null,
+      end: new Date(Date.now() + 3 * 36e5).toISOString(), tasks: [{ id: 'a', text: '任務 A', reward: '' }] },
+  ];
+  const { app, main } = loadApp(data);
+  app.ui.tab = 'overview'; app.render();
+  assert.match(main.innerHTML, /小隕星流星雨：獵戶座 2026/);
+  assert.match(main.innerHTML, /其他快結束任務/);
+  app.toggleTask('my-orion', 1, true);
+  app.toggleTask('ld-generic', 0, true);
+  app.ui.tab = 'overview'; app.render();
+  assert.ok(!main.innerHTML.includes('小隕星流星雨：獵戶座 2026'));
+  assert.ok(!main.innerHTML.includes('其他快結束任務'));
 });
 
 const clickStar = (listeners, kind, id) => listeners.click({ target: { closest: () => ({ disabled: false, dataset: { fav: kind, id } }) } });
@@ -475,4 +516,94 @@ test('manual task form checks the input before sending', () => {
   assert.strictEqual(calls.addManualTask.length, 0);
   assert.match(elements.toast.textContent, /名稱/);
   assert.match(main.innerHTML, /data-mf="name"/);
+});
+
+function manualEditData() {
+  const data = sampleData();
+  data.tasks.push({
+    id: 'my-edit', name: '打錯字的任務', url: '', manual: true,
+    start: new Date(Date.now() - 864e5).toISOString(), end: new Date(Date.now() + 4 * 864e5).toISOString(),
+    tasks: [
+      { id: 't1', text: '捕捉 10 隻寶可夢', reward: '精靈球 ×10' },
+      { id: 't2', text: '轉動 5 個補給站', reward: '' },
+      { id: 't3', text: '孵化 1 顆蛋', reward: '星星沙 ×500' },
+    ],
+  });
+  return data;
+}
+
+test('manual task edit prefills values and updates the same group with stable item ids', () => {
+  const data = manualEditData();
+  const { app, main, listeners, calls } = loadApp(data);
+  app.ui.tab = 'tasks'; app.render();
+  click(listeners, { mfedit: 'my-edit' });
+  assert.strictEqual(app.ui.mf.id, 'my-edit');
+  assert.strictEqual(app.ui.mf.name, '打錯字的任務');
+  assert.match(app.ui.mf.lines, /捕捉 10 隻寶可夢 → 精靈球 ×10[\s\S]*孵化 1 顆蛋 → 星星沙 ×500/);
+  assert.match(main.innerHTML, /編輯任務組[\s\S]*data-mf="name"/);
+
+  const type = (field, value) => listeners.input({ target: { value, dataset: { mf: field }, matches: (sel) => sel === '[data-mf]' } });
+  type('name', '修正後的任務');
+  type('lines', '捕捉 20 隻寶可夢 → 精靈球 ×20\n孵化 1 顆蛋 → 星星沙 ×500\n完成 3 次團體戰 → 神奇糖果');
+  click(listeners, { mfsave: '1' });
+
+  assert.strictEqual(calls.updateManualTask.length, 1);
+  assert.strictEqual(calls.updateManualTask[0][0], 'my-edit');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(calls.updateManualTask[0][1].tasks)), [
+    { id: 't1', text: '捕捉 20 隻寶可夢', reward: '精靈球 ×20' },
+    { id: 't3', text: '孵化 1 顆蛋', reward: '星星沙 ×500' },
+    { text: '完成 3 次團體戰', reward: '神奇糖果' },
+  ]);
+  assert.match(main.innerHTML, /修正後的任務[\s\S]*捕捉 20 隻寶可夢/);
+  assert.ok(!main.innerHTML.includes('打錯字的任務'));
+  assert.ok(!main.innerHTML.includes('data-mf="name"'), 'form closes after updating');
+});
+
+test('failed manual task edit keeps the form and typed values', () => {
+  const data = manualEditData();
+  const { app, main, listeners, calls, elements } = loadApp(data, { manualUpdateFails: true });
+  app.ui.tab = 'tasks'; app.render();
+  click(listeners, { mfedit: 'my-edit' });
+  listeners.input({ target: { value: '尚未儲存的修正', dataset: { mf: 'name' }, matches: (sel) => sel === '[data-mf]' } });
+  click(listeners, { mfsave: '1' });
+  assert.strictEqual(calls.updateManualTask.length, 1);
+  assert.strictEqual(app.ui.mf.open, true);
+  assert.strictEqual(app.ui.mf.name, '尚未儲存的修正');
+  assert.match(main.innerHTML, /編輯任務組[\s\S]*尚未儲存的修正/);
+  assert.match(elements.toast.textContent, /更新失敗/);
+});
+
+test('task-local actions preserve scroll while tab and page navigation go to the top', () => {
+  const data = manualEditData();
+  data.tasks.unshift(doneData().tasks[0]);
+  data.state.taskDone['ld-done#a'] = true;
+  data.state.taskDone['ld-done#b'] = true;
+  const { app, listeners, scrollCalls, window } = loadApp(data, { scrollY: 640 });
+  app.ui.tab = 'tasks'; app.render();
+  const preserved = (action, label) => {
+    window.scrollY = 640; window.pageYOffset = 640; scrollCalls.length = 0;
+    action();
+    assert.deepStrictEqual(scrollCalls.at(-1), [0, 640], label);
+  };
+  preserved(() => listeners.change({ target: { checked: true, dataset: { task: 'my-edit', index: '1' }, matches: (sel) => sel === 'input[data-task]' } }), 'checkbox');
+  preserved(() => click(listeners, { taskopen: 'ld-done' }), 'fold');
+  preserved(() => click(listeners, { flag: 'gaveUp', id: 'ld-done', value: '1' }), 'abandon and response');
+  preserved(() => click(listeners, { mfedit: 'my-edit' }), 'edit');
+  preserved(() => click(listeners, { mfdel: 'my-edit' }), 'delete and response');
+
+  window.scrollY = 640; scrollCalls.length = 0;
+  click(listeners, { tab: 'shop' });
+  assert.deepStrictEqual(scrollCalls.at(-1), [0, 0], 'tab');
+  window.scrollY = 640; scrollCalls.length = 0;
+  click(listeners, { page: 'shop:2' });
+  assert.deepStrictEqual(scrollCalls.at(-1), [0, 0], 'pager');
+});
+
+test('task save status and button share the title row and do not use a standalone savebar', () => {
+  const { app, main } = loadApp(researchData());
+  app.ui.tab = 'tasks'; app.render();
+  assert.match(main.innerHTML, /class="task-title-row"[\s\S]*<h2>任務待辦<\/h2>[\s\S]*data-save/);
+  assert.ok(!main.innerHTML.includes('class="savebar'));
+  app.ui.tab = 'overview'; app.render();
+  assert.ok(!main.innerHTML.includes('data-save'));
 });

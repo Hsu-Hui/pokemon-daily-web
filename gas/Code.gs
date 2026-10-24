@@ -299,6 +299,7 @@ const MANUAL_MAX = 30;            // 每人最多幾組
 const MANUAL_TASKS_MAX = 30;      // 每組最多幾個任務
 const MANUAL_NAME_MAX = 60;
 const MANUAL_TEXT_MAX = 80;       // 任務、獎勵各最多幾個字（一個屬性最多 9 KB）
+const MANUAL_BYTES_MAX = 9000;
 
 /** prune 為 true 時順便刪掉結束超過 keepArchiveDays 天的組。 */
 function listManual_(prune) {
@@ -312,32 +313,97 @@ function listManual_(prune) {
   }).filter(Boolean).sort((a, b) => String(a.end).localeCompare(String(b.end)));
 }
 
+/** 新增與編輯共用的欄位驗證；編輯時沿用既有 task id，新項目從未用過的序號開始。 */
+function normalizeManual_(input, original) {
+  const name = String((input && input.name) || '').trim().slice(0, MANUAL_NAME_MAX);
+  const end = new Date(input && input.end);
+  if (!name || isNaN(end.getTime()) || end.getTime() <= Date.now()) throw new Error('請填名稱和還沒到的結束時間');
+
+  const oldTasks = (original && original.tasks) || [];
+  const oldIds = {};
+  let nextId = 1;
+  oldTasks.forEach((t) => {
+    oldIds[t.id] = true;
+    const m = /^t(\d+)$/.exec(t.id || '');
+    if (m) nextId = Math.max(nextId, Number(m[1]) + 1);
+  });
+  const used = {};
+  const tasks = ((input && input.tasks) || []).map((t) => ({
+    id: String((t && t.id) || ''),
+    text: String((t && t.text) || '').trim().slice(0, MANUAL_TEXT_MAX),
+    reward: String((t && t.reward) || '').trim().slice(0, MANUAL_TEXT_MAX),
+  })).filter((t) => t.text).map((t) => {
+    if (t.id) {
+      if (!original || !oldIds[t.id] || used[t.id]) throw new Error('bad task id');
+    } else {
+      do { t.id = 't' + nextId++; } while (oldIds[t.id] || used[t.id]);
+    }
+    used[t.id] = true;
+    return t;
+  });
+  if (!tasks.length || tasks.length > MANUAL_TASKS_MAX) throw new Error(`任務要 1～${MANUAL_TASKS_MAX} 項`);
+  return { name, end: end.toISOString(), tasks };
+}
+
+function manualJson_(group) {
+  const json = JSON.stringify(group);
+  // 一個屬性最多 9 KB（UTF-8 位元組）
+  if (encodeURIComponent(json).replace(/%[0-9A-F]{2}/g, 'x').length > MANUAL_BYTES_MAX) {
+    throw new Error('任務內容太長，請分成兩組');
+  }
+  return json;
+}
+
 /**
  * 網頁呼叫：新增一組任務。input = { name, end（ISO）, tasks: [{ text, reward }] }。
  * 回傳目前全部手動任務組。
  */
 function addManualTask(input) {
-  const name = String((input && input.name) || '').trim().slice(0, MANUAL_NAME_MAX);
-  const end = new Date(input && input.end);
-  const tasks = ((input && input.tasks) || []).map((t) => ({
-    text: String((t && t.text) || '').trim().slice(0, MANUAL_TEXT_MAX),
-    reward: String((t && t.reward) || '').trim().slice(0, MANUAL_TEXT_MAX),
-  })).filter((t) => t.text);
-  if (!name || isNaN(end.getTime()) || end.getTime() <= Date.now()) throw new Error('請填名稱和還沒到的結束時間');
-  if (!tasks.length || tasks.length > MANUAL_TASKS_MAX) throw new Error(`任務要 1～${MANUAL_TASKS_MAX} 項`);
+  const normalized = normalizeManual_(input, null);
   const lock = LockService.getUserLock();
   lock.waitLock(10000);
   try {
     if (listManual_(false).length >= MANUAL_MAX) throw new Error('手動任務組已滿');
     const id = 'my-' + Date.now().toString(36);
     const group = {
-      id, name, url: '', start: new Date().toISOString(), end: end.toISOString(), manual: true,
-      tasks: tasks.map((t, i) => ({ id: 't' + (i + 1), text: t.text, reward: t.reward })),
+      id, name: normalized.name, url: '', start: new Date().toISOString(), end: normalized.end, manual: true,
+      tasks: normalized.tasks,
     };
-    const json = JSON.stringify(group);
-    // 一個屬性最多 9 KB（UTF-8 位元組）
-    if (encodeURIComponent(json).replace(/%[0-9A-F]{2}/g, 'x').length > 9000) throw new Error('任務內容太長，請分成兩組');
-    PropertiesService.getUserProperties().setProperty(MANUAL_PREFIX + id, json);
+    PropertiesService.getUserProperties().setProperty(MANUAL_PREFIX + id, manualJson_(group));
+    return listManual_(false);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 網頁呼叫：原地更新自己新增的任務組，並清掉已移除項目的完成紀錄。 */
+function updateManualTask(id, input) {
+  id = String(id);
+  if (!/^my-[0-9a-z]+$/.test(id)) throw new Error('bad id');
+  const lock = LockService.getUserLock();
+  lock.waitLock(10000);
+  try {
+    const props = PropertiesService.getUserProperties();
+    const key = MANUAL_PREFIX + id;
+    const raw = props.getProperty(key);
+    if (!raw) throw new Error('找不到手動任務組');
+    const original = JSON.parse(raw);
+    const normalized = normalizeManual_(input, original);
+    const group = Object.assign({}, original, {
+      name: normalized.name,
+      end: normalized.end,
+      tasks: normalized.tasks,
+    });
+    const json = manualJson_(group); // 所有驗證完成後才開始寫入
+
+    const kept = {};
+    group.tasks.forEach((t) => { kept[t.id] = true; });
+    const state = loadState_();
+    original.tasks.forEach((t) => {
+      if (!kept[t.id]) delete state.taskDone[id + '#' + t.id];
+    });
+    props.setProperty(key, json);
+    props.setProperty('state', JSON.stringify(state));
     return listManual_(false);
   } finally {
     lock.releaseLock();
@@ -362,7 +428,7 @@ function remindTasks() {
   // 結束前 earlyRemindHours 小時先提醒一次（記在 earlyReminded），最後 remindHours 小時每小時提醒
   const props = PropertiesService.getUserProperties();
   const early = JSON.parse(props.getProperty('earlyReminded') || '{}');
-  const groups = readRows_('tasks').concat(listManual_(false));
+  const groups = readRows_('tasks').filter((g) => !/^field-/.test(g.id)).concat(listManual_(false));
   groups.forEach((g) => {
     if (!g.end || state.gaveUp[g.id]) return;
     const left = new Date(g.end) - now;
