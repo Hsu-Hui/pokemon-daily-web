@@ -222,20 +222,28 @@ test('overview lists unfinished task groups ending within 48 hours', () => {
 test('overview immediately removes any group the task page marks all done', () => {
   const data = researchData();
   data.tasks = [
-    { id: 'my-orion', name: '小隕星流星雨：獵戶座 2026', url: '', manual: true, start: null,
+    { id: 'ld-orion', name: '限時調查：小隕星流星雨：獵戶座 2026', url: 'https://leekduck.com/events/minior-showers-orionids-2026/', start: null,
       end: new Date(Date.now() + 3 * 36e5).toISOString(), tasks: [{ id: 'a', text: '任務 A', reward: '' }, { id: 'b', text: '任務 B', reward: '' }] },
     { id: 'ld-generic', name: '其他快結束任務', url: 'u', start: null,
       end: new Date(Date.now() + 3 * 36e5).toISOString(), tasks: [{ id: 'a', text: '任務 A', reward: '' }] },
+  ];
+  data.events = [
+    { id: 'event-orion', name: '小隕星流星雨：獵戶座 2026', type: '活動', category: '其他', url: 'https://leekduck.com/events/minior-showers-orionids-2026/', start: null,
+      end: new Date(Date.now() + 2 * 36e5).toISOString(), firstSeen: null },
+    { id: 'event-other', name: '仍然快結束的活動', type: '活動', category: '其他', url: 'https://example.com/other', start: null,
+      end: new Date(Date.now() + 2 * 36e5).toISOString(), firstSeen: null },
   ];
   const { app, main } = loadApp(data);
   app.ui.tab = 'overview'; app.render();
   assert.match(main.innerHTML, /小隕星流星雨：獵戶座 2026/);
   assert.match(main.innerHTML, /其他快結束任務/);
-  app.toggleTask('my-orion', 1, true);
+  app.toggleTask('ld-orion', 1, true);
   app.toggleTask('ld-generic', 0, true);
   app.ui.tab = 'overview'; app.render();
   assert.ok(!main.innerHTML.includes('小隕星流星雨：獵戶座 2026'));
   assert.ok(!main.innerHTML.includes('其他快結束任務'));
+  assert.match(main.innerHTML, /仍然快結束的活動/);
+  assert.match(main.innerHTML, /24 小時內結束<\/span><b[^>]*>2<\/b>/, 'event count is not completion-filtered');
 });
 
 const clickStar = (listeners, kind, id) => listeners.click({ target: { closest: () => ({ disabled: false, dataset: { fav: kind, id } }) } });

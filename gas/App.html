@@ -495,8 +495,21 @@ function newsItem(n, gone) {
     </div>`;
 }
 
+const overviewSourceKey = (url) => String(url || '').split(/[?#]/)[0].replace(/\/+$/, '').toLowerCase();
+const overviewNameKey = (name) => String(name || '').replace(/^限時調查\s*[：:]\s*/, '').replace(/\s+/g, ' ').trim().toLowerCase();
+function eventHasCompletedTask(event, groups) {
+  const eventUrl = overviewSourceKey(event.url), eventName = overviewNameKey(event.name);
+  return groups.some((g) => {
+    const groupUrl = overviewSourceKey(g.url);
+    return (eventUrl && groupUrl && eventUrl === groupUrl) || (eventName && eventName === overviewNameKey(g.name));
+  });
+}
+
 function renderOverview(d) {
-  const soonEvents = d.activeEvents.filter((e) => e.soon);
+  const endingSoonEvents = d.activeEvents.filter((e) => e.soon);
+  const completedTasks = d.activeTasks.filter((g) => g.allDone);
+  // 同一活動的限時調查做完後，不要再以活動標籤出現在「還沒完成」；活動數量統計仍保留。
+  const soonEvents = endingSoonEvents.filter((e) => !eventHasCompletedTask(e, completedTasks));
   // 「快結束了」：沒做完、在 overviewTaskHours（預設 48 小時）內結束的任務組
   const soonTasks = d.activeTasks.filter((g) => !g.allDone && g.left < CONFIG.overviewTaskHours * HOUR);
   const allItems = d.activeTasks.flatMap((g) => g.items);
@@ -504,7 +517,7 @@ function renderOverview(d) {
   return `
     <div class="stats">
       <div class="card stat"><span class="muted">進行中活動</span><b>${d.activeEvents.filter((e) => !e.notStarted).length}</b></div>
-      <div class="card stat"><span class="muted">24 小時內結束</span><b class="soon">${soonEvents.length}</b></div>
+      <div class="card stat"><span class="muted">24 小時內結束</span><b class="soon">${endingSoonEvents.length}</b></div>
       <div class="card stat"><span class="muted">任務進度</span><b style="color:var(--blue)">${allItems.filter((t) => t.done).length}/${allItems.length}</b></div>
       <div class="card stat"><span class="muted">今天新商品</span><b>${fresh.length}</b></div>
     </div>
