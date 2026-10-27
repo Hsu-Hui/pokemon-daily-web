@@ -15,7 +15,7 @@ const PAGE_SIZE = 25;
 // draft：任務勾選的草稿（key → true/false），按「儲存」才送出；saving：儲存中
 // calWeek：行事曆從本週往後移幾週；calOpen：行事曆是否展開
 const emptyManualForm = () => ({ open: false, id: '', name: '', end: '', lines: '', originals: [], saving: false });
-const ui = { draft: {}, saving: false, tab: 'overview', goCats: [], feeds: [], goSort: { key: null, dir: 1 }, shopSort: 'new', shopQuery: '', page: {}, calWeek: 0, calOpen: true, taskOpen: {}, mf: emptyManualForm() };
+const ui = { draft: {}, saving: false, tab: 'overview', goCats: [], feeds: [], archiveCats: [], goSort: { key: null, dir: 1 }, shopSort: 'new', shopQuery: '', page: {}, calWeek: 0, calOpen: true, taskOpen: {}, mf: emptyManualForm() };
 let data = null;
 try { ui.tab = localStorage.getItem('tab') || 'overview'; } catch (e) {}
 try { ui.calOpen = localStorage.getItem('calOpen') !== '0'; } catch (e) {}
@@ -495,22 +495,9 @@ function newsItem(n, gone) {
     </div>`;
 }
 
-const overviewSourceKey = (url) => String(url || '').split(/[?#]/)[0].replace(/\/+$/, '').toLowerCase();
-const overviewNameKey = (name) => String(name || '').replace(/^限時調查\s*[：:]\s*/, '').replace(/\s+/g, ' ').trim().toLowerCase();
-function eventHasCompletedTask(event, groups) {
-  const eventUrl = overviewSourceKey(event.url), eventName = overviewNameKey(event.name);
-  return groups.some((g) => {
-    const groupUrl = overviewSourceKey(g.url);
-    return (eventUrl && groupUrl && eventUrl === groupUrl) || (eventName && eventName === overviewNameKey(g.name));
-  });
-}
-
 function renderOverview(d) {
   const endingSoonEvents = d.activeEvents.filter((e) => e.soon);
-  const completedTasks = d.activeTasks.filter((g) => g.allDone);
-  // 同一活動的限時調查做完後，不要再以活動標籤出現在「還沒完成」；活動數量統計仍保留。
-  const soonEvents = endingSoonEvents.filter((e) => !eventHasCompletedTask(e, completedTasks));
-  // 「快結束了」：沒做完、在 overviewTaskHours（預設 48 小時）內結束的任務組
+  // 「快結束了」只列任務，不列 GO 活動（活動不用完成）：沒做完、在 overviewTaskHours（預設 48 小時）內結束的任務組
   const soonTasks = d.activeTasks.filter((g) => !g.allDone && g.left < CONFIG.overviewTaskHours * HOUR);
   const allItems = d.activeTasks.flatMap((g) => g.items);
   const fresh = d.products.filter(d.isNew);
@@ -524,8 +511,7 @@ function renderOverview(d) {
     <section class="card pad stack">
       <h3>快結束了，還沒完成</h3>
       ${soonTasks.map((g) => `<div class="row"><span class="tag">任務</span><b class="grow">${esc(g.name)}</b><b class="soon" style="font-size:14px">剩 ${leftText(g.left)} · ${g.items.length - g.n} 項未完成</b></div>`).join('')}
-      ${soonEvents.map((e) => `<div class="row">${tagHtml(catOf(e))}<b class="grow">${esc(e.name)}</b><b class="soon" style="font-size:14px">剩 ${leftText(e.left)}</b></div>`).join('')}
-      ${soonTasks.length + soonEvents.length ? '' : '<span class="muted">沒有快結束的項目</span>'}
+      ${soonTasks.length ? '' : '<span class="muted">沒有快結束的任務</span>'}
     </section>
     <section class="stack"><h3>今天新上架</h3>
       ${fresh.length ? `<div class="grid">${fresh.slice(0, 8).map((p) => productCard(p, true)).join('')}</div>` : '<span class="muted">今天沒有新商品</span>'}
@@ -593,9 +579,15 @@ function manualTasksWithIds(tasks, originals) {
   });
 }
 
+/** 「＋ 新增任務組」放在任務待辦標題下面，和儲存按鈕同一行；表單打開時不顯示。 */
+function manualOpenButton() {
+  return ui.mf.open ? '<span></span>'
+    : '<button type="button" class="outline" data-mfopen="1" title="遊戲裡才看得到的限時調查（例如台灣現場活動）可以自己加">＋ 新增任務組</button>';
+}
+
 function manualFormHtml() {
   const f = ui.mf;
-  if (!f.open) return '<div class="toolbar"><button type="button" class="outline" data-mfopen="1">＋ 新增任務組</button><span class="muted">遊戲裡才看得到的限時調查（例如台灣現場活動）可以自己加</span></div>';
+  if (!f.open) return '';
   const editing = !!f.id;
   return `
     <section class="card pad stack" aria-label="${editing ? '編輯' : '新增'}任務組">
@@ -658,7 +650,8 @@ function renderTasks(d) {
   const { items, pager } = paginate(d.activeTasks, 'tasks');
   return `
     <div class="head task-head">
-      <div class="task-title-row"><h2>任務待辦</h2>${saveControlsHtml()}</div>
+      <h2>任務待辦</h2>
+      <div class="task-title-row">${manualOpenButton()}${saveControlsHtml()}</div>
       <span class="muted task-description">田野調查和活動限時調查來自 LeekDuck，另外會讀巴哈姆特 Pokémon GO 哈啦板的情報；結束前 ${REMIND_MS / HOUR} 小時還沒完成會發 Discord 提醒</span>
     </div>
     ${fieldRewardsHtml(d.fieldRewards)}
@@ -720,13 +713,16 @@ function renderFav(d) {
 }
 
 function renderArchive(d) {
-  const list = d.archivedTasks.map((g) => ({
-    tag: '<span class="tag">任務</span>', name: g.name,
+  const sel = ui.archiveCats;
+  const all = d.archivedTasks.map((g) => ({
+    cat: '任務', tag: '<span class="tag">任務</span>', name: g.name,
     reason: g.gaveUp ? '已放棄 · 不再提醒' : `已結束 · ${when(g.end)}`,
     restore: g.gaveUp && !g.ended ? `data-flag="gaveUp" data-id="${esc(g.id)}" data-value=""` : '',
   })).concat(d.endedEvents.map((e) => ({
-    tag: tagHtml(catOf(e)), name: e.name, reason: `已結束 · ${when(e.end)}`, restore: '',
+    cat: catOf(e), tag: tagHtml(catOf(e)), name: e.name, reason: `已結束 · ${when(e.end)}`, restore: '',
   })));
+  const list = sel.length ? all.filter((a) => sel.includes(a.cat)) : all;
+  const count = (c) => (c === '全部' ? all : all.filter((a) => a.cat === c)).length;
   const { items, pager } = paginate(list, 'archive');
   const rows = items.map((a) => `
     <div class="card pad row">${a.tag}
@@ -735,7 +731,8 @@ function renderArchive(d) {
     </div>`).join('');
   return `
     <div class="head"><h2>封存</h2><span class="muted">已結束的活動，以及已放棄或已結束的任務；放棄按錯了可以按「復原」</span></div>
-    ${rows + pager || '<p class="muted">封存是空的</p>'}`;
+    <div class="pills" aria-label="封存分類">${pillsHtml(['任務'].concat(CATEGORIES), sel, 'archcat', count)}</div>
+    ${rows + pager || `<p class="muted">${all.length ? '這個分類沒有封存' : '封存是空的'}</p>`}`;
 }
 
 const RENDERERS = {
@@ -750,7 +747,7 @@ function render() {
 // ---------- 事件 ----------
 
 document.addEventListener('click', (ev) => {
-  const t = ev.target.closest('[data-tab],[data-taskopen],[data-mfopen],[data-mfedit],[data-mfsave],[data-mfdel],[data-gocat],[data-calmove],[data-caltoggle],[data-feed],[data-sort],[data-page],button[data-flag],button[data-save],button[data-fav]');
+  const t = ev.target.closest('[data-tab],[data-taskopen],[data-mfopen],[data-mfedit],[data-mfsave],[data-mfdel],[data-gocat],[data-archcat],[data-calmove],[data-caltoggle],[data-feed],[data-sort],[data-page],button[data-flag],button[data-save],button[data-fav]');
   if (!t || t.disabled) return;
   const ds = t.dataset;
   if ('save' in ds) { saveDraft(); return; }
@@ -763,6 +760,7 @@ document.addEventListener('click', (ev) => {
   else if (ds.taskopen) { ui.taskOpen[ds.taskopen] = !ui.taskOpen[ds.taskopen]; renderPreservingScroll(); return; }
   else if (ds.calmove) { ui.calWeek = +ds.calmove ? ui.calWeek + +ds.calmove : 0; }
   else if (ds.caltoggle) { ui.calOpen = !ui.calOpen; try { localStorage.setItem('calOpen', ui.calOpen ? '1' : '0'); } catch (e) {} }
+  else if (ds.archcat) { ui.archiveCats = toggleIn(ui.archiveCats, ds.archcat); ui.page.archive = 1; }
   else if (ds.gocat) { ui.goCats = toggleIn(ui.goCats, ds.gocat); ui.page.go = 1; }
   else if (ds.feed) { ui.feeds = toggleIn(ui.feeds, ds.feed); ui.page.tw = 1; }
   else if (ds.sort) {
