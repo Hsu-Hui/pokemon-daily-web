@@ -235,14 +235,15 @@ test('overview immediately removes any group the task page marks all done', () =
   ];
   const { app, main } = loadApp(data);
   app.ui.tab = 'overview'; app.render();
-  assert.match(main.innerHTML, /小隕星流星雨：獵戶座 2026/);
+  assert.match(main.innerHTML, /限時調查：小隕星流星雨：獵戶座 2026/);
   assert.match(main.innerHTML, /其他快結束任務/);
+  assert.ok(!main.innerHTML.includes('仍然快結束的活動'), 'GO events are not listed');
   app.toggleTask('ld-orion', 1, true);
   app.toggleTask('ld-generic', 0, true);
   app.ui.tab = 'overview'; app.render();
   assert.ok(!main.innerHTML.includes('小隕星流星雨：獵戶座 2026'));
   assert.ok(!main.innerHTML.includes('其他快結束任務'));
-  assert.match(main.innerHTML, /仍然快結束的活動/);
+  assert.ok(!main.innerHTML.includes('仍然快結束的活動'), 'GO events are not listed');
   assert.match(main.innerHTML, /24 小時內結束<\/span><b[^>]*>2<\/b>/, 'event count is not completion-filtered');
 });
 
@@ -610,8 +611,46 @@ test('task-local actions preserve scroll while tab and page navigation go to the
 test('task save status and button share the title row and do not use a standalone savebar', () => {
   const { app, main } = loadApp(researchData());
   app.ui.tab = 'tasks'; app.render();
-  assert.match(main.innerHTML, /class="task-title-row"[\s\S]*<h2>任務待辦<\/h2>[\s\S]*data-save/);
+  // 標題下面一行：左邊「＋ 新增任務組」，右邊儲存
+  assert.match(main.innerHTML, /<h2>任務待辦<\/h2>\s*<div class="task-title-row"><button[^>]*data-mfopen="1"[^>]*>＋ 新增任務組<\/button><div class="task-save-controls">[\s\S]*data-save/);
+  assert.strictEqual((main.innerHTML.match(/data-mfopen="1"/g) || []).length, 1, 'only one add button');
   assert.ok(!main.innerHTML.includes('class="savebar'));
   app.ui.tab = 'overview'; app.render();
   assert.ok(!main.innerHTML.includes('data-save'));
+});
+
+test('overview 快結束了 lists tasks only, never GO events', () => {
+  const data = sampleData();
+  data.events[0].end = new Date(Date.now() + 2 * 36e5).toISOString();
+  data.tasks = [];
+  const { app, main } = loadApp(data);
+  app.ui.tab = 'overview'; app.render();
+  const soon = main.innerHTML.slice(main.innerHTML.indexOf('快結束了'), main.innerHTML.indexOf('今天新上架'));
+  assert.ok(!soon.includes('聚焦時刻：皮卡丘'));
+  assert.match(soon, /沒有快結束的任務/);
+});
+
+test('archive has category pills like the GO tab', () => {
+  const data = sampleData();
+  const ago = (h) => new Date(Date.now() - h * 36e5).toISOString();
+  data.events.push(
+    { id: 'x1', name: '已結束的聚焦時刻', type: '聚焦時刻', category: '聚焦時刻', url: 'u', start: ago(3), end: ago(2), firstSeen: ago(3) },
+    { id: 'x2', name: '已結束的團體戰', type: '團體戰', category: '團體戰/超級團體戰', url: 'u', start: ago(3), end: ago(2), firstSeen: ago(3) });
+  data.tasks.push({ id: 'g-old', name: '已結束的任務組', url: 'u', start: ago(30), end: ago(1), firstSeen: ago(30), tasks: [{ id: 't', text: 'x', reward: '' }] });
+  const { app, main, listeners } = loadApp(data);
+  app.ui.tab = 'archive'; app.ui.page.archive = 2; app.render();
+  assert.match(main.innerHTML, /data-archcat="全部"[^>]*>全部 3/);
+  assert.match(main.innerHTML, /data-archcat="任務"[^>]*>任務 1/);
+  assert.match(main.innerHTML, /data-archcat="聚焦時刻"[^>]*>聚焦時刻 1/);
+  click(listeners, { archcat: '任務' });
+  assert.strictEqual(app.ui.page.archive, 1);
+  assert.match(main.innerHTML, /已結束的任務組/);
+  assert.ok(!main.innerHTML.includes('已結束的聚焦時刻'));
+  click(listeners, { archcat: '聚焦時刻' });
+  assert.match(main.innerHTML, /已結束的任務組[\s\S]*已結束的聚焦時刻|已結束的聚焦時刻[\s\S]*已結束的任務組/);
+  assert.ok(!main.innerHTML.includes('已結束的團體戰'));
+  click(listeners, { archcat: 'GO Pass' }); click(listeners, { archcat: '任務' }); click(listeners, { archcat: '聚焦時刻' });
+  assert.match(main.innerHTML, /這個分類沒有封存/);
+  click(listeners, { archcat: '全部' });
+  assert.match(main.innerHTML, /已結束的團體戰/);
 });
