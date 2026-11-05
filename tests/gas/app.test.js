@@ -94,7 +94,8 @@ test('ended events go to archive without restore', () => {
   data.events.push({ id: 'old', name: '已結束的活動', type: '活動', category: '其他', url: 'u', start: ended, end: ended, firstSeen: ended });
   const { app, main } = loadApp(data);
   app.ui.tab = 'go'; app.render();
-  assert.ok(!main.innerHTML.includes('已結束的活動'));
+  // 行事曆會淡淡畫出來，但活動列表不列
+  assert.ok(!main.innerHTML.slice(main.innerHTML.indexOf('cal-legend')).includes('已結束的活動'));
   app.ui.tab = 'archive'; app.render();
   assert.match(main.innerHTML, /已結束的活動/);
   assert.ok(!main.innerHTML.includes('>復原</button>'));
@@ -431,6 +432,23 @@ test('calendar follows category filter, week buttons and collapse', () => {
   const again = loadApp(data, { storage });
   again.app.ui.tab = 'go'; again.app.render();
   assert.ok(!again.main.innerHTML.includes('cal-bar'));
+});
+
+test('calendar still shows events that ended earlier today, dimmed', () => {
+  const data = sampleData();
+  const now = Date.now();
+  data.events.push({ id: 'spot', name: '聚焦時刻：熊寶寶', type: '聚焦時刻', category: '聚焦時刻', url: 'u',
+    start: new Date(now - 3 * HOUR).toISOString(), end: new Date(now - 2 * HOUR).toISOString(), firstSeen: new Date(now - DAY).toISOString() });
+  const { app, main } = loadApp(data);
+  app.ui.tab = 'go'; app.render();
+  const bar = wideBar(main.innerHTML, 'spot');
+  assert.ok(bar, 'ended event is on the calendar');
+  assert.match(bar, /class="cal-bar past/);
+  assert.match(main.innerHTML, /class="cal-name past"/);
+  // 活動列表只列還沒結束的
+  const list = main.innerHTML.slice(main.innerHTML.indexOf('cal-legend'));
+  assert.ok(!list.includes('聚焦時刻：熊寶寶'));
+  assert.ok(!wideBar(main.innerHTML, 'e1').includes(' past'));
 });
 
 test('calendar shows a hint when nothing falls in the range', () => {
