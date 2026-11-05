@@ -358,8 +358,8 @@ function calGrid(events, first, days, today, narrow) {
   }).join('');
   const body = rows.map((r, i) => {
     const row = 2 + i * per;
-    const name = `<div class="cal-name" style="grid-column:${narrow ? '2 / -1' : 1};grid-row:${row}"><i class="cal-dot" style="background:${calColor(r.e)}"></i><span>${esc(r.e.name)}</span></div>`;
-    const bar = `<a class="cal-bar${r.cutL ? ' cut-l' : ''}${r.cutR ? ' cut-r' : ''}${r.span === 1 ? ' one' : ''}" href="${esc(r.e.url)}" target="_blank" rel="noopener" title="${esc(r.e.name)}" data-cal="${esc(r.e.id)}" style="grid-column:${r.col + 2} / span ${r.span};grid-row:${row + per - 1};background:${calColor(r.e)}">${r.cutL ? '‹ ' : ''}${esc(r.text)}${r.cutR ? ' ›' : ''}</a>`;
+    const name = `<div class="cal-name${r.e.ended ? ' past' : ''}" style="grid-column:${narrow ? '2 / -1' : 1};grid-row:${row}"><i class="cal-dot" style="background:${calColor(r.e)}"></i><span>${esc(r.e.name)}</span></div>`;
+    const bar = `<a class="cal-bar${r.e.ended ? ' past' : ''}${r.cutL ? ' cut-l' : ''}${r.cutR ? ' cut-r' : ''}${r.span === 1 ? ' one' : ''}" href="${esc(r.e.url)}" target="_blank" rel="noopener" title="${esc(r.e.name)}" data-cal="${esc(r.e.id)}" style="grid-column:${r.col + 2} / span ${r.span};grid-row:${row + per - 1};background:${calColor(r.e)}">${r.cutL ? '‹ ' : ''}${esc(r.text)}${r.cutR ? ' ›' : ''}</a>`;
     return name + bar;
   }).join('');
   return rows.length
@@ -523,11 +523,13 @@ function renderGo(d) {
   const sel = ui.goCats;
   const filtered = sel.length ? d.activeEvents.filter((e) => sel.includes(catOf(e))) : d.activeEvents;
   const { items, pager } = paginate(sortEvents(filtered), 'go');
+  // 行事曆連今天已經結束的活動也畫（變淡），才看得到今天稍早的聚焦時刻
+  const allEvents = d.activeEvents.concat(d.endedEvents);
   const count = (c) => c === '全部' ? d.activeEvents.length : d.activeEvents.filter((e) => catOf(e) === c).length;
   return `
     <div class="head"><h2>Pokémon GO 活動</h2><span class="muted">分類可以多選；活動結束後會自動移到封存</span></div>
     <div class="pills" aria-label="活動分類">${pillsHtml(CATEGORIES, sel, 'gocat', count)}</div>
-    ${calendarHtml(filtered)}
+    ${calendarHtml(sel.length ? allEvents.filter((e) => sel.includes(catOf(e))) : allEvents)}
     <div class="toolbar only-narrow"><span class="muted">排序</span>${sortButton('type', '類型')}${sortButton('start', '開始')}${sortButton('end', '結束')}</div>
     ${items.length ? `
       <div class="card scroll only-wide"><table>
